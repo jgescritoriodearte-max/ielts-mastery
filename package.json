@@ -1,0 +1,24 @@
+{
+  "name": "ielts-mastery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-first personal IELTS preparation PWA. Zero cost: GitHub Pages + browser storage.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "reindex": "node build.mjs --reindex",
+    "audit": "node scripts/audit_content.mjs dist",
+    "typecheck": "tsc --noEmit",
+    "serve": "npx --yes serve dist -l 5173"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "0.27.7",
+    "typescript": "^5.9.0"
+  }
+}
