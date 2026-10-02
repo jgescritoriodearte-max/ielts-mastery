@@ -1,0 +1,97 @@
+name: Build and deploy IELTS Mastery
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # only used once, to unpack ielts-mastery.zip into the repository (phone upload)
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack ielts-mastery.zip (first publication from a phone)
+        run: |
+          ARC=""; for f in ielts-mastery.zip ielts-mastery.tar.xz; do [ -f "$f" ] && ARC="$f"; done
+          if [ -z "$ARC" ]; then echo "No archive in the repository - using the files as they are."; exit 0; fi
+          echo "Found $ARC - unpacking the project into the repository."
+          rm -rf /tmp/unz && mkdir -p /tmp/unz
+          case "$ARC" in *.zip) unzip -q "$ARC" -d /tmp/unz ;; *) tar -xJf "$ARC" -C /tmp/unz ;; esac
+          SRC=/tmp/unz; [ -d /tmp/unz/ielts-mastery ] && SRC=/tmp/unz/ielts-mastery
+          test -f "$SRC/package.json" || { echo "::error::package.json not found inside the zip"; exit 1; }
+          # copy everything except .github (workflow files can only be changed by you, not by the bot)
+          (cd "$SRC" && find . -mindepth 1 -maxdepth 1 ! -name .github -exec cp -a {} "$GITHUB_WORKSPACE"/ \;)
+          git rm -q "$ARC"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Unpack IELTS Mastery project from $ARC"
+          git push
+          echo "Project unpacked and committed. Continuing with the build."
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install build tools
+        run: npm install --no-audit --no-fund
+      - name: Build app and content packs
+        run: npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Restore audio cache
+        uses: actions/cache@v4
+        with:
+          path: .audio-cache
+          key: audio-${{ hashFiles('content/**', 'scripts/make_audio.py') }}
+          restore-keys: audio-
+      - name: Generate pre-produced audio with Piper (optional - never blocks deploy)
+        id: audio
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "::group::Install ffmpeg + Piper"
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install "piper-tts>=1.2,<2"
+          echo "::endgroup::"
+          python scripts/make_audio.py dist 2>&1 | tee audio.log
+      - name: Re-index packs (sizes, versions, audio files)
+        run: node build.mjs --reindex
+      - name: Audit content packs
+        run: node scripts/audit_content.mjs dist
+      - name: Report audio status
+        if: always()
+        run: |
+          node -e '
+            const idx = require("./dist/packs/index.json");
+            const n = idx.packs.reduce((a, p) => a + p.audioFiles, 0);
+            const lines = idx.packs.map(p => `| ${p.title} | ${p.audioFiles} | ${(p.bytes/1048576).toFixed(1)} MB |`).join("\n");
+            const head = n > 0
+              ? `### Piper audio: ${n} MP3 files generated and embedded in the offline packs.`
+              : "### Piper audio NOT generated - the app is deployed and uses Device Voice (Internet not required) for Listening.";
+            const out = `${head}\n\n| Pack | Audio files | Size |\n|---|---|---|\n${lines}\n`;
+            console.log(out);
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out);
+          '
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
