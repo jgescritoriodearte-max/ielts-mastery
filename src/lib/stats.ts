@@ -5,7 +5,7 @@ import { criteriaBand, overallBand, roundBand, writingBand } from "./bands";
 import { addDays, dateFromKey, todayKey } from "./util";
 import { status } from "./srs";
 
-export type Source = "app" | "ai" | "self" | "declared" | null;
+export type Source = "app" | "ai" | "self" | "declared" | "external" | null;
 export interface Estimate { band: number | null; source: Source; n: number; }
 
 const SCORED = new Set(["practice", "diagnostic", "mock"]);
@@ -46,6 +46,11 @@ export function estimates(s: State): Record<Skill, Estimate> & { overall: number
   const e: Record<Skill, Estimate> = {
     L: lrEstimate(s.attempts, "L"), R: lrEstimate(s.attempts, "R"), W: writingEstimate(s), S: speakingEstimate(s),
   };
+  // Real tests (Cambridge books, official exams) take priority over practice estimates for 60 days.
+  (["L", "R", "W", "S"] as Skill[]).forEach((k) => {
+    const ext = s.external.filter((x) => x[k] != null).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (ext && (Date.now() - new Date(ext.date + "T12:00:00").getTime()) / 864e5 <= 60) e[k] = { band: ext[k] as number, source: "external", n: 0 };
+  });
   (["L", "R", "W", "S"] as Skill[]).forEach((k) => {
     if (e[k].band == null && s.profile.selfLevel?.[k] != null) e[k] = { band: s.profile.selfLevel[k] as number, source: "declared", n: 0 };
   });
@@ -54,7 +59,7 @@ export function estimates(s: State): Record<Skill, Estimate> & { overall: number
 }
 
 export const SOURCE_LABEL: Record<string, string> = {
-  app: "from your answers", ai: "from imported Claude feedback", self: "self-assessed", declared: "your declared level",
+  external: "from your latest real test (priority)", app: "from your answers", ai: "from imported Claude feedback", self: "self-assessed", declared: "your declared level",
 };
 
 /* ---- time series for charts ---- */

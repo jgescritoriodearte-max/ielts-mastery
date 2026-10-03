@@ -29,7 +29,7 @@ export function AudioPanel({ set, exam, onStarted, onLine }: { set: QSet; exam: 
 
   const start = () => {
     onStarted?.();
-    if (usingFile && el.current) { el.current.playbackRate = exam ? 1 : rate; el.current.play(); setState("playing"); return; }
+    if (usingFile && el.current) { el.current.playbackRate = exam ? 1 : [0.75, 1, 1.25].includes(rate) ? rate : 1; el.current.play(); setState("playing"); return; }
     if (!ttsSupported()) { toast("This browser has no speech engine. Open the transcript instead."); return; }
     if (!tts.current) tts.current = new LinePlayer(lines, { accent, rate: exam ? 1 : rate, onLine: (i) => { setProg(i / lines.length); onLine?.(i); }, onEnd: () => { setState("ended"); setProg(1); } });
     tts.current.play(state === "paused" ? tts.current.index : 0);
@@ -45,6 +45,11 @@ export function AudioPanel({ set, exam, onStarted, onLine }: { set: QSet; exam: 
           {usingFile ? <span className="chip accent">Pre-produced audio · synthetic neural voice</span> : <span className="chip warn">Device Voice — Internet not required</span>}
           {set.generated && <AiLabel />}
         </div>
+        {!exam && usingFile && (
+          <select value={rate} onChange={(e) => { const r = Number(e.target.value); setRate(r); if (el.current) el.current.playbackRate = r; }} aria-label="Speed" style={{ width: "auto" }}>
+            <option value={0.75}>0.75×</option><option value={1}>1×</option><option value={1.25}>1.25×</option>
+          </select>
+        )}
         {!exam && !usingFile && (
           <div className="row">
             <select value={accent} onChange={(e) => { setAccent(e.target.value); restart(); }} aria-label="Accent" style={{ width: "auto" }}>

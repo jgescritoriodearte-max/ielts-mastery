@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useStore, recordAttempt, type ItemResult } from "../lib/store";
-import { findSet, getContent, usePacksVersion } from "../lib/packs";
+import { findSet, getContent, usePacksVersion, LEVELS } from "../lib/packs";
 import type { QSet } from "../lib/types";
 import { flatten, normalize, STRATEGY, TAG_LABEL, checkGap } from "../lib/scoring";
 import { accuracyByType, tagCounts } from "../lib/stats";
@@ -10,8 +10,8 @@ import { speak, ttsSupported } from "../lib/tts";
 import { pick, shuffle, uid } from "../lib/util";
 import { go } from "../lib/pwa";
 
-const LEVELS = ["Beginner", "Intermediate", "Upper-Intermediate", "Advanced", "IELTS Level"];
-const R_CATS = ["Science", "History", "Environment", "Technology", "Society", "Education", "Psychology", "Culture", "Business", "Health", "Art", "Travel", "Geography"];
+
+const R_CATS = ["Science", "History", "Archaeology", "Environment", "Climate", "Biology", "Technology", "Society", "Education", "Psychology", "Culture", "Heritage", "Economics", "Business", "Health", "Art", "Urban planning", "Language", "Travel", "Geography"];
 
 function bestOf(s: ReturnType<typeof useStore>, id: string) {
   const a = s.attempts.filter((x) => x.ref === id && x.kind !== "mistakes");
@@ -26,7 +26,7 @@ function SetCard({ set, base }: { set: QSet; base: string }) {
   const types = [...new Set(set.groups.map((g) => g.qtype))];
   return (
     <div className="card stack">
-      <div className="row between"><span className="eyebrow">{set.category} · {set.level}</span>{best ? <span className={"chip " + (best.correct / best.total >= 0.75 ? "good" : "warn")}>Best {best.correct}/{best.total}</span> : <span className="chip">New</span>}</div>
+      <div className="row between"><span className="eyebrow">{set.skill === "L" && set.part ? `Part ${set.part} · ` : ""}{set.category} · {set.level}</span>{best ? <span className={"chip " + (best.correct / best.total >= 0.75 ? "good" : "warn")}>Best {best.correct}/{best.total}</span> : <span className="chip">New</span>}</div>
       <h3>{set.title}</h3>
       <div className="row">{types.map((t) => <span key={t} className="chip">{t}</span>)}{set.generated && <AiLabel />}</div>
       <div className="row between" style={{ marginTop: "auto" }}>

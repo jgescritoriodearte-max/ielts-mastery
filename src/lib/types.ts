@@ -1,8 +1,8 @@
 export type Skill = "L" | "R" | "W" | "S";
-export type AnySkill = Skill | "G" | "V";
+export type AnySkill = Skill | "G" | "V" | "P";
 export const SKILLS: Skill[] = ["L", "R", "W", "S"];
 export const SKILL_NAME: Record<AnySkill, string> = {
-  L: "Listening", R: "Reading", W: "Writing", S: "Speaking", G: "Grammar", V: "Vocabulary",
+  L: "Listening", R: "Reading", W: "Writing", S: "Speaking", G: "Grammar", V: "Vocabulary", P: "Paraphrasing",
 };
 
 export interface Rec { id: string; updatedAt: number; }
@@ -59,6 +59,7 @@ export interface QSet {
   title: string;
   category: string;
   level: string;
+  band?: number;
   mock: string | null;
   part?: number;
   mins?: number;
@@ -186,6 +187,8 @@ export interface MockResult extends Rec {
 export interface ExternalResult extends Rec {
   name: string; date: string;
   L: number | null; R: number | null; W: number | null; S: number | null; overall: number | null;
+  /* Cambridge Book Tracker (optional) */
+  source?: string; book?: number; test?: number; lRaw?: number | null; rRaw?: number | null; notes?: string;
 }
 
 export interface CustomPack extends Rec {

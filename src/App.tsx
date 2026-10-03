@@ -18,6 +18,8 @@ import { AiHubPage } from "./pages/AiHub";
 import { LibraryPage } from "./pages/Library";
 import { DataPage } from "./pages/Data";
 import { SettingsPage } from "./pages/Settings";
+import { CambridgePage, ParaphrasePage } from "./pages/Extras";
+import { getIndex, isDownloaded } from "./lib/packs";
 
 const NAV: { group: string; items: { to: string; label: string; icon: string; dot?: string }[] }[] = [
   { group: "Overview", items: [
@@ -28,10 +30,10 @@ const NAV: { group: string; items: { to: string; label: string; icon: string; do
     { to: "writing", label: "Writing", icon: "write", dot: "var(--W)" }, { to: "speaking", label: "Speaking", icon: "speak", dot: "var(--S)" },
   ] },
   { group: "Language", items: [
-    { to: "vocabulary", label: "Vocabulary", icon: "vocab" }, { to: "grammar", label: "Grammar", icon: "grammar" },
+    { to: "vocabulary", label: "Vocabulary", icon: "vocab" }, { to: "grammar", label: "Grammar", icon: "grammar" }, { to: "paraphrase", label: "Paraphrasing", icon: "para" },
   ] },
   { group: "Tests & review", items: [
-    { to: "mock", label: "Mock Tests", icon: "mock" }, { to: "mistakes", label: "My Mistakes", icon: "mistakes" }, { to: "bank", label: "Question Bank", icon: "bank" },
+    { to: "mock", label: "Mock Tests", icon: "mock" }, { to: "cambridge", label: "Cambridge Tracker", icon: "book" }, { to: "mistakes", label: "My Mistakes", icon: "mistakes" }, { to: "bank", label: "Question Bank", icon: "bank" },
   ] },
   { group: "Tools", items: [
     { to: "ai", label: "IELTS AI Tutor", icon: "ai" }, { to: "library", label: "Offline Library", icon: "library" },
@@ -77,6 +79,8 @@ export function App() {
     case "library": page = <LibraryPage />; break;
     case "data": page = <DataPage />; break;
     case "settings": page = <SettingsPage />; break;
+    case "paraphrase": page = <ParaphrasePage parts={rest} />; break;
+    case "cambridge": page = <CambridgePage />; break;
     case "onboarding": page = <Onboarding />; break;
     default: page = <Dashboard />;
   }
@@ -108,6 +112,8 @@ export function App() {
           <span className="small muted hide-exam" style={{ fontWeight: 600 }}>{examMode ? "" : "IELTS Mastery"}</span>
           <div className="grow" />
           {pwa.updateReady && <button className="btn sm primary hide-exam" onClick={applyUpdate} title="Your progress and offline packs are kept">Update available · Reload</button>}
+          {(() => { const ess = getIndex().filter((p) => p.essential); const missing = ess.filter((p) => !isDownloaded(p.id)).length; const ready = pwa.swActive && ess.length > 0 && missing === 0;
+            return <a href="#/library" className={"chip hide-exam " + (ready ? "good" : "warn")} title={ready ? "App and all essential packs are stored on this device." : "Open the Offline Library while online and wait until every pack shows Downloaded."}>{ready ? "Offline ready ✓" : missing ? `Not offline yet · ${missing} pack${missing > 1 ? "s" : ""} missing` : "Not offline yet"}</a>; })()}
           <span className={"status " + (online ? "on" : "off")} title={online ? "Connected. Everything works offline too." : "No connection. All study features keep working."}><i />{online ? "ONLINE" : "OFFLINE"}</span>
         </header>
         <main className="content">

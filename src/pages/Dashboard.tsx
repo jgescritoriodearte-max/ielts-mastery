@@ -88,7 +88,7 @@ export function Dashboard() {
               <span className="name"><span style={{ width: 9, height: 9, borderRadius: 3, background: SKILL_COLOR[k], display: "inline-block" }} />{SKILL_NAME[k]}</span>
               <div><BandRuler band={e[k].band} target={s.profile.skillTargets?.[k] ?? s.profile.target} color={SKILL_COLOR[k]} />
                 <div className="tiny muted">{e[k].source ? SOURCE_LABEL[e[k].source!] + (e[k].source === "app" ? ` · ${e[k].n} questions` : e[k].n ? ` · ${e[k].n} tasks` : "") : k === "W" || k === "S" ? "Submit a task and self-assess or import Claude feedback" : "Complete at least 10 questions"}</div></div>
-              <span className="val">{fmtBand(e[k].band)}</span>
+              <span className="val">{fmtBand(e[k].band)}{e[k].band != null && <span className="tiny" style={{ display: "block", color: (s.profile.skillTargets?.[k] ?? s.profile.target) - (e[k].band as number) > 0 ? "var(--warn)" : "var(--good)" }}>{(s.profile.skillTargets?.[k] ?? s.profile.target) - (e[k].band as number) > 0 ? `+${((s.profile.skillTargets?.[k] ?? s.profile.target) - (e[k].band as number)).toFixed(1)} needed` : "on target ✓"}</span>}</span>
             </div>
           ))}
           <Disclaimer />

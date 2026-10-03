@@ -21,10 +21,13 @@ function loadEsbuild() {
 
 const PACK_INFO = {
   "listening-01": { title: "IELTS Listening Pack 01", kind: "listening", essential: true, description: "4 practice recordings from Beginner to Advanced: form, sentence, table, summary, diagram, multiple choice, matching and short-answer questions." },
-  "reading-01": { title: "IELTS Reading Pack 01", kind: "reading", essential: true, description: "3 Academic-style passages (Technology, Business, Education) covering 11 question types." },
-  "grammar-01": { title: "IELTS Grammar Pack", kind: "grammar", essential: true, description: "15 grammar topics for Band 7+: lessons, examples and 75 progressive exercises." },
-  "vocabulary-01": { title: "IELTS Vocabulary Pack", kind: "vocabulary", essential: true, description: "112 words in 16 IELTS topics with definitions, examples, synonyms, antonyms, collocations, word families and Portuguese." },
-  "prompts-01": { title: "Writing & Speaking Pack", kind: "prompts", essential: true, description: "Writing Task 1 (Academic charts and GT letters), 24 Task 2 topics, Speaking Parts 1-3 and shadowing sentences." },
+  "reading-01": { title: "IELTS Reading Pack 01", kind: "reading", essential: true, description: "Academic-style passages in five levels (≈5.5 to 7.5+) on science, history, environment, society, art and more, covering all IELTS question types." },
+  "grammar-01": { title: "IELTS Grammar Pack", kind: "grammar", essential: true, description: "23 grammar topics (A2-C1, focus B2/C1): lessons, examples and 300+ progressive exercises." },
+  "vocabulary-01": { title: "IELTS Vocabulary Pack", kind: "vocabulary", essential: true, description: "About 1,000 words and expressions: academic verbs, nouns and adjectives, IELTS topics, collocations, linking expressions, paraphrasing and Task 1 data language." },
+  "prompts-01": { title: "Writing & Speaking Pack", kind: "prompts", essential: true, description: "Writing Task 1 (all chart types, processes and maps) and 70+ Task 2 prompts, a large Speaking Part 1-3 bank and shadowing sentences." },
+  "listening-02": { title: "IELTS Listening Pack 02 · Parts 1-2", kind: "listening", essential: true, description: "Everyday conversations and monologues (Parts 1-2), levels 5.5 to 7.5: forms, notes, tables, multiple choice, matching and map labelling." },
+  "listening-03": { title: "IELTS Listening Pack 03 · Parts 3-4", kind: "listening", essential: true, description: "Academic discussions and lectures (Parts 3-4), levels 6.0 to 7.5: opinions, matching, flow-charts and note completion." },
+  "paraphrase-01": { title: "Paraphrasing Trainer Pack", kind: "paraphrase", essential: true, description: "Synonyms, grammar transformations, active/passive, noun-verb changes, sentence structure and reporting verbs." },
   "mock-01": { title: "IELTS Mock Test 01", kind: "mock", essential: true, description: "Full test with exclusive content: Listening 40 questions, Reading 40 questions, Writing Tasks 1 and 2, Speaking Parts 1-3." },
 };
 
@@ -37,19 +40,41 @@ async function writePacks() {
   const P = await imp("prompts.mjs");
   const { MOCKS } = await imp("mocks.mjs");
 
+  // ---- extra banks (content/bank/*.mjs) ----
+  const bank = async (f) => { const fp = path.join(ROOT, "content", "bank", f); return fs.existsSync(fp) ? import(pathToFileURL(fp).href) : {}; };
+  const BAND_LABEL = { 5.5: "Level 1 · 5.5", 6: "Level 2 · 6.0", 6.5: "Level 3 · 6.5", 7: "Level 4 · 7.0", 7.5: "Level 5 · 7.5+" };
+  const withLevel = (sets) => (sets || []).map((s) => ({ ...s, level: BAND_LABEL[s.band] || s.level }));
+  const extraReading = [];
+  for (const f of ["reading-55.mjs", "reading-60.mjs", "reading-65.mjs", "reading-70.mjs", "reading-75.mjs"]) extraReading.push(...withLevel((await bank(f)).SETS));
+  const lp = {}; const extraMaps = {};
+  for (const n of [1, 2, 3, 4]) { const m = await bank(`listening-p${n}.mjs`); lp[n] = withLevel(m.SETS); Object.assign(extraMaps, m.MAPS || {}); }
+  const gx = await bank("grammar-extra.mjs"), gn = await bank("grammar-new.mjs");
+  const grammar = GRAMMAR.map((t) => ({ ...t, ex: [...t.ex, ...((gx.GRAMMAR_EXTRA || {})[t.id] || []), ...((gn.GRAMMAR_EXTRA || {})[t.id] || [])] }));
+  grammar.push(...(gx.NEW_TOPICS || []), ...(gn.NEW_TOPICS || []));
+  const vocab = {}; const seenW = new Set();
+  const addVocab = (obj) => { for (const [cat, list] of Object.entries(obj || {})) for (const w of list) { const k = String(w[0]).toLowerCase().trim(); if (seenW.has(k)) continue; seenW.add(k); (vocab[cat] ||= []).push(w); } };
+  addVocab(VOCAB);
+  for (const f of ["vocab-academic.mjs", "vocab-topics.mjs", "vocab-functional.mjs"]) addVocab((await bank(f)).VOCAB_EXTRA);
+  const px = await bank("prompts-extra.mjs");
+  const P2 = { ...P, WRITING_T1_ACADEMIC: [...P.WRITING_T1_ACADEMIC, ...(px.WRITING_T1_EXTRA || [])], WRITING_T2: [...P.WRITING_T2, ...(px.WRITING_T2_EXTRA || [])],
+    SPEAKING_P1: { ...P.SPEAKING_P1, ...(px.SPEAKING_P1_EXTRA || {}) }, SPEAKING_P2: [...P.SPEAKING_P2, ...(px.SPEAKING_P2_EXTRA || [])] };
+  const paraphrase = (await bank("paraphrase.mjs")).PARAPHRASE || [];
   const lJob = (s) => ({ id: s.id, voices: s.voices, lines: s.lines });
   const clip = (text, voice = "gb_m") => ({ id: clipId(text), voices: { N: voice }, lines: [["N", text]] });
   const speakingClips = [
-    ...Object.values(P.SPEAKING_P1).flat().map((q) => clip(q)),
-    ...P.SPEAKING_P2.flatMap((c) => [clip(c.topic), ...c.p3.map((q) => clip(q))]),
-    ...Object.values(P.SHADOWING).flat().map((t) => clip(t, "gb_f")),
+    ...Object.values(P2.SPEAKING_P1).flat().map((q) => clip(q)),
+    ...P2.SPEAKING_P2.flatMap((c) => [clip(c.topic), ...c.p3.map((q) => clip(q))]),
+    ...Object.values(P2.SHADOWING).flat().map((t) => clip(t, "gb_f")),
   ];
   const packs = {
     "listening-01": { data: { sets: LISTENING_SETS.filter((s) => !s.mock), maps: MAPS }, jobs: LISTENING_SETS.filter((s) => !s.mock).map(lJob) },
-    "reading-01": { data: { sets: READING_SETS.filter((s) => !s.mock) }, jobs: [] },
-    "grammar-01": { data: { topics: GRAMMAR }, jobs: [] },
-    "vocabulary-01": { data: { categories: VOCAB }, jobs: [] },
-    "prompts-01": { data: { t1a: P.WRITING_T1_ACADEMIC, t1gt: P.WRITING_T1_GT, t2: P.WRITING_T2, p1: P.SPEAKING_P1, p2: P.SPEAKING_P2, shadowing: P.SHADOWING }, jobs: speakingClips },
+    "listening-02": { data: { sets: [...lp[1], ...lp[2]], maps: extraMaps }, jobs: [...lp[1], ...lp[2]].map(lJob) },
+    "listening-03": { data: { sets: [...lp[3], ...lp[4]], maps: extraMaps }, jobs: [...lp[3], ...lp[4]].map(lJob) },
+    "reading-01": { data: { sets: [...READING_SETS.filter((s) => !s.mock), ...extraReading] }, jobs: [] },
+    "grammar-01": { data: { topics: grammar }, jobs: [] },
+    "vocabulary-01": { data: { categories: vocab }, jobs: [] },
+    "paraphrase-01": { data: { items: paraphrase }, jobs: [] },
+    "prompts-01": { data: { t1a: P2.WRITING_T1_ACADEMIC, t1gt: P2.WRITING_T1_GT, t2: P2.WRITING_T2, p1: P2.SPEAKING_P1, p2: P2.SPEAKING_P2, shadowing: P2.SHADOWING }, jobs: speakingClips },
   };
   for (const m of MOCKS) {
     const n = m.id.split("-")[1];
@@ -62,7 +87,7 @@ async function writePacks() {
     if (!PACK_INFO[m.id]) PACK_INFO[m.id] = { title: `IELTS ${m.title}`, kind: "mock", essential: false, description: "Full mock test." };
   }
   // sanity checks: mock content never appears in practice packs
-  const practiceIds = new Set([...packs["listening-01"].data.sets, ...packs["reading-01"].data.sets].map((s) => s.id));
+  const practiceIds = new Set([...packs["listening-01"].data.sets, ...packs["listening-02"].data.sets, ...packs["listening-03"].data.sets, ...packs["reading-01"].data.sets].map((s) => s.id));
   for (const m of MOCKS) for (const id of [...m.listening, ...m.reading]) if (practiceIds.has(id)) throw new Error(`Mock set ${id} is also in a practice pack`);
 
   for (const [id, p] of Object.entries(packs)) {

@@ -5,8 +5,8 @@ import path from "node:path";
 const dist = path.resolve(process.argv[2] || "dist");
 const errors = [], warns = [];
 const idx = JSON.parse(fs.readFileSync(path.join(dist, "packs/index.json"), "utf8"));
-const setIds = new Map(), vocabIds = new Set(), grammarIds = new Set();
-const LEVELS = new Set(["Beginner", "Intermediate", "Upper-Intermediate", "Advanced", "IELTS Level"]);
+const setIds = new Map(), vocabIds = new Set(), grammarIds = new Set(); let grammarEx = 0;
+const LEVELS = new Set(["Beginner", "Intermediate", "Upper-Intermediate", "Advanced", "IELTS Level", "Level 1 · 5.5", "Level 2 · 6.0", "Level 3 · 6.5", "Level 4 · 7.0", "Level 5 · 7.5+"]);
 for (const entry of idx.packs) {
   const dir = path.join(dist, "packs", entry.id);
   for (const f of entry.files) if (!fs.existsSync(path.join(dir, f))) errors.push(`${entry.id}: listed file missing ${f}`);
@@ -29,11 +29,12 @@ for (const entry of idx.packs) {
     }));
     if (s.lines && !p.audio?.[s.id]) warns.push(`${s.id}: no pre-produced audio (device voice fallback)`);
   }
-  for (const [cat, list] of Object.entries(p.data.categories || {})) for (const w of list) { const id = `${cat}:${w[0]}`; if (vocabIds.has(id)) errors.push(`duplicate word ${id}`); vocabIds.add(id); if (w.length !== 9) errors.push(`word ${id}: ${w.length} fields`); }
-  for (const t of p.data.topics || []) { if (grammarIds.has(t.id)) errors.push(`duplicate grammar ${t.id}`); grammarIds.add(t.id); t.ex.forEach((e, i) => { if (!(e.a >= 0 && e.a < e.opts.length)) errors.push(`grammar ${t.id}#${i}: bad answer index`); if (!e.why || !e.natural) errors.push(`grammar ${t.id}#${i}: missing explanation`); }); }
+  for (const [cat, list] of Object.entries(p.data.categories || {})) for (const w of list) { const id = `${cat}:${w[0]}`; if (vocabIds.has(id)) errors.push(`duplicate word ${id}`); vocabIds.add(id); if (w.length !== 9 && w.length !== 10) errors.push(`word ${id}: ${w.length} fields`); }
+  for (const t of p.data.topics || []) { if (grammarIds.has(t.id)) errors.push(`duplicate grammar ${t.id}`); grammarIds.add(t.id); grammarEx += t.ex.length; t.ex.forEach((e, i) => { if (!(e.a >= 0 && e.a < e.opts.length)) errors.push(`grammar ${t.id}#${i}: bad answer index`); if (!e.why || !e.natural) errors.push(`grammar ${t.id}#${i}: missing explanation`); }); }
+  for (const it of p.data.items || []) { if (it.task === "choose" ? !(it.a >= 0 && it.a < (it.opts || []).length) : !(Array.isArray(it.a) && it.a.length)) errors.push(`paraphrase ${it.id}: bad answer`); }
   if (p.label !== "AI-generated IELTS-style practice") errors.push(`${entry.id}: label is "${p.label}"`);
 }
-console.log(`sets ${setIds.size}, words ${vocabIds.size}, grammar topics ${grammarIds.size}`);
+console.log(`sets ${setIds.size}, words ${vocabIds.size}, grammar topics ${grammarIds.size}, grammar exercises ${grammarEx}`);
 warns.forEach((w) => console.log("WARN", w));
 errors.forEach((e) => console.log("ERROR", e));
 console.log(errors.length ? `FAILED: ${errors.length} error(s)` : "CONTENT OK");

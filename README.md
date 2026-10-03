@@ -178,12 +178,13 @@ Tudo neste app é **AI-generated IELTS-style practice**: os exercícios incluíd
 - **Os áudios usam vozes sintéticas** (Piper), não gravações reais de exame.
 - **Notas de Listening/Reading** usam as tabelas de conversão publicadas mais comuns, que variam um pouco entre testes. Conjuntos curtos dão estimativas grosseiras.
 - **Writing/Speaking sem o Claude** recebem apenas checagens por regras e a sua autoavaliação, não uma nota confiável.
-- **O conteúdo incluído é limitado:**
-  - 4 gravações e 3 textos de prática;
-  - 1 simulado completo;
-  - 15 tópicos de gramática;
-  - 112 palavras;
-  - temas de Writing e Speaking.
+- **Conteúdo incluído (versão 2):**
+  - 33 textos de Reading em 5 níveis (≈5.5 a 7.5+) e 29 seções de Listening (Parts 1-4);
+  - 1 simulado completo (os simulados 02-10 estão planejados);
+  - 23 tópicos e 305 exercícios de gramática (A2-C1);
+  - cerca de 1.000 palavras e expressões;
+  - 125 exercícios de paráfrase;
+  - 36 prompts de Task 1, 72 de Task 2, 37 temas de Part 1 e 46 cartões de Part 2.
   
   Amplie com *Generate Practice* e com os testes Cambridge (registre as notas em *External Test Results*).
 - **iPhone/Safari não foi testado.**
@@ -197,6 +198,15 @@ Tudo neste app é **AI-generated IELTS-style practice**: os exercícios incluíd
 - O app só faz requisições ao próprio site (pacotes de conteúdo).
 - O Claude é um serviço externo. O conteúdo só chega até ele se **você** colar lá.
 - A transcrição ao vivo do Speaking é opcional e usa o serviço de voz do próprio navegador (no Chrome, o áudio vai para o Google). Ela só roda se você marcar essa opção.
+
+## Novidades da versão 2
+
+- **Paraphrasing Trainer** (menu › Paraphrasing).
+- **Cambridge Book Tracker** (menu › Cambridge Tracker): resultados reais têm prioridade sobre as estimativas por 60 dias.
+- Dashboard mostra quanto falta para a meta em cada habilidade.
+- Aviso **"Offline ready ✓"** no topo quando o app e todos os pacotes estão no aparelho.
+- Velocidade 0.75× / 1× / 1.25× nos áudios gravados.
+- Novo conteúdo é validado por `node scripts/validate_source.mjs` (veja `content/CONTENT_SPEC.md`).
 
 ## Adding Mock Test 02
 

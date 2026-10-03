@@ -98,7 +98,7 @@ export function doneToday(s: State): Record<Area, number> {
   const k = todayKey();
   const out: Record<Area, number> = { L: 0, R: 0, W: 0, S: 0, V: 0, G: 0, X: 0, M: 0 };
   for (const a of s.attempts) if (todayKey(new Date(a.ts)) === k) {
-    const area: Area = a.kind === "mistakes" ? "X" : a.kind === "mock" ? "M" : (a.skill as Area);
+    const area: Area = a.kind === "mistakes" ? "X" : a.kind === "mock" ? "M" : a.skill === "P" ? "V" : (a.skill as Area);
     out[area] += a.secs / 60;
   }
   for (const w of s.writings) if (todayKey(new Date(w.updatedAt)) === k) out.W += w.secs / 60;

@@ -28,6 +28,7 @@ const P: Record<string, string> = {
   refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7", clock: "M12 7v5l3 2M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z",
   flag: "M5 21V4M5 4h11l-2 4 2 4H5", wifi: "M2 9a15 15 0 0 1 20 0M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01",
   star: "M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z",
+  para: "M4 7h9M4 12h16M4 17h9M16 5l3 2-3 2M16 15l3 2-3 2", book: "M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z",
   arrow: "M5 12h14M13 6l6 6-6 6", back: "M19 12H5M11 18l-6-6 6-6", info: "M12 8v.5M11 12h1v5h1M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z",
 };
 export function Icon({ name, size = 18, className }: { name: string; size?: number; className?: string }) {
