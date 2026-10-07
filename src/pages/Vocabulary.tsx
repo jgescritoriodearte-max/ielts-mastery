@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
-import { recordAttempt, saveVocab, useStore, type ItemResult } from "../lib/store";
+import React, { useMemo, useRef, useState } from "react";
+import { recordAttempt, reviewVocab, useStore, type ItemResult } from "../lib/store";
 import { getContent, usePacksVersion } from "../lib/packs";
-import { grade, isDue, repeatedlyMissed, status, type Grade } from "../lib/srs";
+import { isDue, repeatedlyMissed, status, wordProfile, type Axis, type Grade } from "../lib/srs";
 import { vocabCounts } from "../lib/stats";
 import { normalize } from "../lib/scoring";
 import { pick, shuffle } from "../lib/util";
@@ -29,6 +29,7 @@ function VocabHome() {
   const vc = vocabCounts(s, all.map((v) => v.id));
   const cats = [...new Set(all.map((v) => v.cat))];
   const [qcat, setQcat] = useState("All");
+  const gap = all.filter((v) => wordProfile(s.vocab[v.id]).productionGap).length;
   if (!all.length) return <Empty>The Vocabulary Pack is not on this device. <a href="#/library">Download it</a>.</Empty>;
   return (
     <>
@@ -40,12 +41,13 @@ function VocabHome() {
         <div className="kpi"><div className="eyebrow">Learning</div><div className="v num">{vc.Learning}</div></div>
         <div className="kpi"><div className="eyebrow">Review</div><div className="v num">{vc.Review}</div></div>
         <div className="kpi"><div className="eyebrow">Mastered</div><div className="v num">{vc.Mastered}</div></div>
+        <div className="kpi"><div className="eyebrow">Recognised, not yet produced</div><div className="v num" style={{ color: gap ? "var(--warn)" : undefined }}>{gap}</div>{gap > 0 && <a className="small" href="#/produce?focus=vocab">Production Lab →</a>}</div>
         <div className="kpi"><div className="eyebrow">Repeatedly missed</div><div className="v num" style={{ color: vc.missed ? "var(--bad)" : undefined }}>{vc.missed}</div></div>
       </div>
       <div className="card stack">
         <div className="row between"><h2>Practice</h2><select value={qcat} onChange={(e) => setQcat(e.target.value)} style={{ width: "auto" }} aria-label="Category"><option>All</option>{cats.map((c) => <option key={c}>{c}</option>)}</select></div>
         <div className="row"><a className="btn primary" href="#/vocabulary/study/due"><Icon name="vocab" />Flashcards: words due today</a>{MODES.map((m) => <a key={m.v} className="btn" href={`#/vocabulary/quiz/${m.v}/${encodeURIComponent(qcat)}`}>{m.label}</a>)}</div>
-        <p className="small muted">Every answer updates the review schedule: correct answers push the next review further away; wrong answers bring the word back tomorrow.</p>
+        <p className="small muted">Every answer updates the review schedule: correct answers push the next review further away; wrong answers bring the word back tomorrow. Each word has two schedules: <b>recognition</b> (flashcards, multiple choice) and <b>production</b> (fill in the blanks, word formation, Production Lab).</p>
       </div>
       <div className="grid g-auto">
         {cats.map((c) => {
@@ -72,8 +74,8 @@ function CategoryList({ cat }: { cat: string }) {
   return (
     <>
       <div className="page-head"><div><a className="small" href="#/vocabulary">← Vocabulary</a><h1>{cat}</h1></div><a className="btn primary" href={`#/vocabulary/study/${encodeURIComponent(cat)}`}>Study this topic</a></div>
-      <div className="card table-wrap"><table className="t"><thead><tr><th>Word</th><th>Meaning</th><th>Collocation</th><th>Status</th><th>Next review</th></tr></thead><tbody>
-        {ws.map((v) => { const st = s.vocab[v.id]; return <tr key={v.id}><td><b>{v.w[0]}</b> <span className="muted small">{v.w[1]}</span><div className="tiny muted">{v.w[8]}</div></td><td className="small">{v.w[2]}</td><td className="small">{v.w[6]}</td><td><span className={"chip " + (status(st) === "Mastered" ? "good" : repeatedlyMissed(st) ? "bad" : "")}>{status(st)}</span></td><td className="num small">{st?.seen ? st.due : "–"}</td></tr>; })}
+      <div className="card table-wrap"><table className="t"><thead><tr><th>Word</th><th>Meaning</th><th>Collocation</th><th>Recognition</th><th>Production</th><th>Next review</th></tr></thead><tbody>
+        {ws.map((v) => { const st = s.vocab[v.id]; return <tr key={v.id}><td><b>{v.w[0]}</b> <span className="muted small">{v.w[1]}</span><div className="tiny muted">{v.w[8]}</div></td><td className="small">{v.w[2]}</td><td className="small">{v.w[6]}</td><td><span className={"chip " + (status(st) === "Mastered" ? "good" : repeatedlyMissed(st) ? "bad" : "")}>{status(st)}</span></td><td><span className={"chip " + (wordProfile(st).productionGap ? "warn" : wordProfile(st).prodK === "none" ? "" : "good")}>{wordProfile(st).prodK === "none" ? (wordProfile(st).productionGap ? "gap" : "–") : wordProfile(st).prodK}</span></td><td className="num small">{st?.seen ? st.due : "–"}</td></tr>; })}
       </tbody></table></div>
     </>
   );
@@ -98,6 +100,7 @@ function Flashcards({ scope }: { scope: string }) {
   const deck = useMemo(() => pickWords(s, all, scope, 10), [scope, all.length]);
   const [i, setI] = useState(0);
   const [flip, setFlip] = useState(false);
+  const shownAt = useRef(Date.now());
   const [res, setRes] = useState<{ ok: number; n: number }>({ ok: 0, n: 0 });
   const secs = useStopwatch(i < deck.length);
   if (!deck.length) return <><div className="page-head"><div><a className="small" href="#/vocabulary">← Vocabulary</a><h1>Flashcards</h1></div></div><Empty>{scope === "due" ? "No words are due today. Learn new words or take a quiz." : "No words to study here."} <a href="#/vocabulary/study/new">Learn new words</a></Empty></>;
@@ -111,9 +114,9 @@ function Flashcards({ scope }: { scope: string }) {
   const v = deck[i];
   const [word, pos, def, ex, syn, ant, coll, fam, pt] = v.w;
   const rate = async (g: Grade) => {
-    await saveVocab(grade(s.vocab[v.id], v.id, g));
+    await reviewVocab(v.id, "rec", g, { task: "flashcard", ms: Date.now() - shownAt.current });   // recognition axis (+ response time)
     const next = { ok: res.ok + (g > 0 ? 1 : 0), n: res.n + 1 };
-    setRes(next); setFlip(false);
+    setRes(next); setFlip(false); shownAt.current = Date.now();
     if (i + 1 >= deck.length) await finish(next);
     setI(i + 1);
   };
@@ -138,6 +141,9 @@ function Flashcards({ scope }: { scope: string }) {
     </>
   );
 }
+
+/** Typing the word/form yourself = production axis; picking from options = recognition axis. */
+const axisOfMode = (mode: string): Axis => (mode === "blank" || mode === "form" ? "prod" : "rec");
 
 interface QQ { v: W; prompt: string; opts?: string[]; answer: string; accept?: string[]; }
 function buildQuiz(mode: string, words: W[], pool: W[]): QQ[] {
@@ -190,13 +196,12 @@ function Quiz({ mode, cat }: { mode: string; cat: string }) {
     for (let i = 0; i < qs.length; i++) {
       const q = qs[i], good = ok(q, ans[i] || "");
       if (good) correct++;
-      await saveVocab(grade(getStateVocab(q.v.id), q.v.id, good ? 2 : 0));
+      await reviewVocab(q.v.id, axisOfMode(mode), good ? 2 : 0, { task: "quiz-" + mode });   // typed modes train PRODUCTION; choosing trains RECOGNITION (errors are filed by recordAttempt below)
       items.push({ qid: `v:${mode}:${q.v.id}`, ok: good, your: ans[i] || "", correct: q.answer, prompt: q.prompt, qtype: label, tag: q.v.cat, explanation: `${q.v.w[0]} (${q.v.w[1]}): ${q.v.w[2]}. Example: ${q.v.w[3]}`, difficulty: "Vocabulary", skill: "V", ref: q.v.id });
     }
     await recordAttempt({ ts: Date.now(), skill: "V", kind: "practice", ref: "quiz-" + mode, title: `Vocabulary: ${label}`, correct, total: qs.length, band: null, secs: Math.round(secs), byType: { [label]: [correct, qs.length] }, tags: {}, category: cat }, items);
     toast(`${correct}/${qs.length} correct — schedule updated.`);
   };
-  const getStateVocab = (id: string) => s.vocab[id];
   return (
     <>
       <div className="page-head"><div><a className="small" href="#/vocabulary">← Vocabulary</a><h1>{label}</h1><p className="sub">{cat === "All" ? "All topics" : cat} · words due or often missed come first.</p></div>

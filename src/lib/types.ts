@@ -17,6 +17,7 @@ export interface Profile {
   minutesDay: number;
   selfLevel: Partial<Record<Skill, number>>;
   difficulties: string[];
+  priors?: Partial<Record<"W" | "G" | "L" | "R" | "S", number>>; // initial importance (0-1) per area; see engine.ts (project estimates)
   prefer: string;
   onboarded: boolean;
   createdAt: number;
@@ -100,6 +101,10 @@ export interface ItemStat extends Rec { c: number; w: number; last: number; last
 
 export interface Mistake extends Rec {
   ts: number;
+  cat?: string;      // taxonomy category (see taxonomy.ts); set automatically, may be refined by the user
+  cause?: string;    // Listening: why the answer was missed (a taxonomy id); user-chosen or inferred from the tag
+  due?: string;      // YYYY-MM-DD: next spaced re-check (project estimate schedule, see errorbank.ts)
+  src?: string;      // origin: quiz, production, ai-writing, ai-speaking, local-writing
   skill: AnySkill;
   ref: string;       // set id / grammar topic / vocab word id
   qid: string;
@@ -115,9 +120,40 @@ export interface Mistake extends Rec {
   reviewCount: number;
 }
 
+/** One SRS axis. VocabState keeps its legacy top-level fields as the RECOGNITION axis (no migration needed); `prod` is the PRODUCTION axis. */
+export interface AxisState {
+  reps: number; interval: number; ease: number; due: string; lapses: number;
+  seen: number; ok: number; bad: number; lastTs: number;
+  streak: number;   // consecutive correct answers on this axis
+  emaMs: number;    // exponential moving average of response time in ms (0 = no timing yet)
+}
 export interface VocabState extends Rec {
   reps: number; interval: number; ease: number; due: string; lapses: number;
   seen: number; ok: number; bad: number; lastTs: number; first?: number;
+  streak?: number; emaMs?: number;   // recognition-axis extras (optional: old records lack them)
+  prod?: AxisState;                  // production axis (optional: created on first production answer)
+}
+
+/** Grammar structure tracked on two axes, plus evidence of use in Writing. id = "g:<topicId>". */
+export interface SkillItem extends Rec {
+  kind: "grammar"; cat: string; label: string;
+  rec: AxisState; prod: AxisState;
+  writing: { uses: number; errors: number; last: number };   // reserved for the Writing Lab (P1); filled from imported feedback when available
+}
+
+/** One review event (append-only log). Lets intervals and engine weights be recomputed later. */
+export interface Review extends Rec {
+  ts: number; item: string; kind: "vocab" | "skill" | "mistake"; axis: "rec" | "prod";
+  task: string; ok: boolean; grade: number; ms: number; cat?: string;
+}
+
+/** Aggregated Error Bank record, one per category. id = category id. */
+export interface ErrorStat extends Rec {
+  cat: string; area: string; first: number; last: number; total: number;
+  events: number[]; eventAreas: string[];        // parallel arrays, newest last, capped
+  streak: number; relapses: number; lastStatus: "weak" | "developing" | "consolidated";
+  src: Record<string, number>;
+  ex: { a: string; b: string }[];               // recent examples (wrong, correct)
 }
 
 export interface Criteria { [k: string]: number | null; }
@@ -150,6 +186,7 @@ export interface Writing extends Rec {
   mockId?: string;
   self?: Criteria;
   ai?: AiFeedback;
+  versions?: { text: string; ts: number; secs: number; note?: string }[]; // reserved for the Writing Lab rewrite/compare cycle (P1)
 }
 
 export interface Recording extends Rec {

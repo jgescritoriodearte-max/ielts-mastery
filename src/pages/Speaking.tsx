@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { deleteRecording, getRecordingBlob, getState, logStudy, saveRecording, useStore } from "../lib/store";
+import { addAiFeedbackMistakes, deleteRecording, getRecordingBlob, getState, logStudy, saveRecording, useStore } from "../lib/store";
 const getStateRec = (id: string) => getState().recordings.find((x) => x.id === id);
 import { audioUrl, getContent, usePacksVersion } from "../lib/packs";
 import type { Recording } from "../lib/types";
@@ -270,7 +270,7 @@ function Recordings() {
         <div className="card stack"><h2>Copy to Claude — {chosen.length} answer(s)</h2>
           {chosen.some((r) => !r.transcript.trim()) && <div className="callout warn small">Some selected answers have no transcript. Claude can only assess text: add transcripts first.</div>}
           <CopyToClaude prompt={speakingPrompt(s, chosen)} label="Copy speaking evaluation prompt" note="Pronunciation cannot be assessed from a transcript; the prompt tells Claude to leave it unscored." />
-          <ImportFeedback skill="speaking" onImport={async (fb) => { for (const r of chosen) await saveRecording({ ...r, ai: fb }); setSel([]); }} />
+          <ImportFeedback skill="speaking" onImport={async (fb) => { for (const r of chosen) { await saveRecording({ ...r, ai: fb }); await addAiFeedbackMistakes("S", r.id, r.topic, fb); } setSel([]); }} />
         </div>
       )}
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `Part ${open.part} answer` : ""} wide>

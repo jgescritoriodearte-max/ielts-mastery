@@ -13,6 +13,8 @@ import { VocabularyPage } from "./pages/Vocabulary";
 import { GrammarPage } from "./pages/Grammar";
 import { MockPage } from "./pages/Mock";
 import { BankPage, MistakesPage } from "./pages/Mistakes";
+import { ErrorBankPage } from "./pages/ErrorBank";
+import { ProducePage } from "./pages/Produce";
 import { ProgressPage } from "./pages/Progress";
 import { AiHubPage } from "./pages/AiHub";
 import { LibraryPage } from "./pages/Library";
@@ -33,7 +35,7 @@ const NAV: { group: string; items: { to: string; label: string; icon: string; do
     { to: "vocabulary", label: "Vocabulary", icon: "vocab" }, { to: "grammar", label: "Grammar", icon: "grammar" }, { to: "paraphrase", label: "Paraphrasing", icon: "para" },
   ] },
   { group: "Tests & review", items: [
-    { to: "mock", label: "Mock Tests", icon: "mock" }, { to: "cambridge", label: "Cambridge Tracker", icon: "book" }, { to: "mistakes", label: "My Mistakes", icon: "mistakes" }, { to: "bank", label: "Question Bank", icon: "bank" },
+    { to: "mock", label: "Mock Tests", icon: "mock" }, { to: "cambridge", label: "Cambridge Tracker", icon: "book" }, { to: "produce", label: "Production Lab", icon: "write" }, { to: "errors", label: "Error Bank", icon: "mistakes" }, { to: "mistakes", label: "My Mistakes", icon: "mistakes" }, { to: "bank", label: "Question Bank", icon: "bank" },
   ] },
   { group: "Tools", items: [
     { to: "ai", label: "IELTS AI Tutor", icon: "ai" }, { to: "library", label: "Offline Library", icon: "library" },
@@ -72,7 +74,9 @@ export function App() {
     case "vocabulary": page = <VocabularyPage parts={rest} />; break;
     case "grammar": page = <GrammarPage parts={rest} />; break;
     case "mock": page = <MockPage parts={rest} />; break;
-    case "mistakes": page = <MistakesPage parts={rest} />; break;
+    case "mistakes": page = <MistakesPage parts={rest} query={route.query} />; break;
+    case "errors": page = <ErrorBankPage />; break;
+    case "produce": page = <ProducePage query={route.query} />; break;
     case "bank": page = <BankPage />; break;
     case "progress": page = <ProgressPage />; break;
     case "ai": page = <AiHubPage parts={rest} />; break;

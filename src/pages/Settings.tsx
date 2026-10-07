@@ -4,6 +4,7 @@ import { applyTheme } from "../lib/theme";
 import { BandSelect, Seg } from "../ui/components";
 import { SKILL_NAME, type Skill } from "../lib/types";
 import { speak } from "../lib/tts";
+import { AREA_LABEL, CORE, DEFAULT_PRIORS, PRIOR_LEVELS, priorsOf } from "../lib/engine";
 
 export function SettingsPage() {
   const s = useStore();
@@ -25,6 +26,10 @@ export function SettingsPage() {
             <label className="field">Hours per week<input type="number" min={1} max={60} value={p.hoursWeek} onChange={(e) => saveProfile({ hoursWeek: Number(e.target.value) })} /></label>
             <label className="field">Minutes per day<input type="number" min={10} max={300} step={5} value={p.minutesDay} onChange={(e) => saveProfile({ minutesDay: Number(e.target.value) })} /></label>
           </div>
+          <h3>Study priorities</h3>
+          <p className="small muted">Starting importance of each area for the adaptive engine. It is only a starting point: as the app collects real results, the data gradually overrules these choices (and the next biggest weakness rises when one improves). Project estimates, not research results.</p>
+          <div className="grid g2">{CORE.map((k) => <label key={k} className="field">{AREA_LABEL[k]}<select value={String(priorsOf(s)[k])} onChange={(e) => saveProfile({ priors: { ...(p.priors || {}), [k]: Number(e.target.value) } })}>{PRIOR_LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}</select></label>)}</div>
+          <button className="btn sm ghost" style={{ alignSelf: "flex-start" }} onClick={() => saveProfile({ priors: { ...DEFAULT_PRIORS } })}>Reset to my profile (Writing → Grammar/Listening → Reading/Speaking)</button>
         </div>
         <div className="stack lg">
           <div className="card stack">

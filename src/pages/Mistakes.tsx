@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { recordAttempt, setMistakeResolved, useStore, type ItemResult } from "../lib/store";
+import { recordAttempt, setMistakeCategory, setMistakeResolved, useStore, type ItemResult } from "../lib/store";
+import { catLabel, LISTENING_CAUSES } from "../lib/taxonomy";
+import { mistakeDue } from "../lib/errorbank";
 import { findSet, getContent, usePacksVersion } from "../lib/packs";
 import type { Mistake } from "../lib/types";
 import { SKILL_NAME } from "../lib/types";
@@ -10,9 +12,9 @@ import { Empty, HBars, Icon, toast, useStopwatch } from "../ui/components";
 
 const SK = ["All", "R", "L", "W", "G", "V", "S"];
 
-export function MistakesPage({ parts }: { parts: string[] }) {
+export function MistakesPage({ parts, query }: { parts: string[]; query?: URLSearchParams }) {
   usePacksVersion();
-  if (parts[0] === "practice") return <PracticeMistakes />;
+  if (parts[0] === "practice") return <PracticeMistakes cat={query?.get("cat") || ""} />;
   return <MistakesHome />;
 }
 
@@ -33,7 +35,7 @@ function MistakesHome() {
   return (
     <>
       <div className="page-head"><div><h1>My Mistakes</h1><p className="sub">Every wrong answer is recorded automatically. A mistake is resolved after you get it right twice in “Practice My Mistakes”.</p></div>
-        <a className={"btn primary" + (open.length ? "" : " disabled")} href="#/mistakes/practice"><Icon name="refresh" />Practice My Mistakes ({open.length})</a></div>
+        <div className="row"><a className="btn" href="#/errors">Error Bank (by category)</a><a className={"btn primary" + (open.length ? "" : " disabled")} href="#/mistakes/practice"><Icon name="refresh" />Practice My Mistakes ({open.length})</a></div></div>
       <div className="kpis">{["R", "L", "W", "G", "V", "S"].map((k) => <div key={k} className="kpi"><div className="eyebrow">{SKILL_NAME[k as "R"]}</div><div className="v num">{bySkill[k] || 0}</div><div className="s">open errors</div></div>)}</div>
       <div className="grid g2">
         {["R", "L", "W", "G"].filter((k) => groups[k]).map((k) => (
@@ -45,8 +47,10 @@ function MistakesHome() {
         <div className="row between"><h2>Error log</h2>
           <div className="row"><select value={skill} onChange={(e) => setSkill(e.target.value)} style={{ width: "auto" }} aria-label="Skill">{SK.map((k) => <option key={k} value={k}>{k === "All" ? "All skills" : SKILL_NAME[k as "R"]}</option>)}</select>
             <select value={show} onChange={(e) => setShow(e.target.value as any)} style={{ width: "auto" }} aria-label="Status"><option value="open">Open</option><option value="resolved">Resolved</option><option value="all">All</option></select></div></div>
-        {list.length ? <div className="table-wrap"><table className="t"><thead><tr><th>Date</th><th>Skill</th><th>Question</th><th>My answer</th><th>Correct</th><th>Error type</th><th>Difficulty</th><th /></tr></thead><tbody>
-          {list.slice(0, 200).map((m) => <tr key={m.id}><td className="num small">{fmtDate(m.ts)}</td><td>{SKILL_NAME[m.skill]}</td><td className="small" style={{ maxWidth: 300 }}>{m.prompt}</td><td className="small" style={{ color: "var(--bad)" }}>{m.your}</td><td className="small" style={{ color: "var(--good)" }}>{m.correct}</td><td><span className="chip">{TAG_LABEL[m.tag] || m.tag || m.qtype}</span></td><td className="small">{m.difficulty}</td>
+        {list.length ? <div className="table-wrap"><table className="t"><thead><tr><th>Date</th><th>Skill</th><th>Question</th><th>My answer</th><th>Correct</th><th>Error category</th><th>Difficulty</th><th /></tr></thead><tbody>
+          {list.slice(0, 200).map((m) => <tr key={m.id}><td className="num small">{fmtDate(m.ts)}</td><td>{SKILL_NAME[m.skill]}</td><td className="small" style={{ maxWidth: 300 }}>{m.prompt}</td><td className="small" style={{ color: "var(--bad)" }}>{m.your}</td><td className="small" style={{ color: "var(--good)" }}>{m.correct}</td><td>{m.skill === "L" && !m.resolved
+              ? <select value={m.cat || "ls.other"} onChange={(e) => setMistakeCategory(m.id, e.target.value)} aria-label="Why did I miss it?" style={{ width: "auto", maxWidth: 220 }}>{[...new Set([m.cat || "ls.other", ...LISTENING_CAUSES])].map((c) => <option key={c} value={c}>{catLabel(c).replace("Listening: ", "")}</option>)}</select>
+              : <span className="chip">{m.cat ? catLabel(m.cat) : TAG_LABEL[m.tag] || m.tag || m.qtype}</span>}</td><td className="small">{m.difficulty}</td>
             <td><button className="btn sm ghost" onClick={() => setMistakeResolved(m.id, !m.resolved)}>{m.resolved ? "Reopen" : "Resolve"}</button></td></tr>)}
         </tbody></table></div> : <Empty>{show === "open" ? "No open mistakes. Keep practising!" : "Nothing here."}</Empty>}
       </div>
@@ -87,11 +91,12 @@ function buildPQ(m: Mistake, vocab: any[], grammar: any[]): PQ | null {
   return { m, kind: "self", prompt: m.prompt, answer: m.correct };
 }
 
-function PracticeMistakes() {
+function PracticeMistakes({ cat }: { cat: string }) {
   const s = useStore();
   const c = getContent();
   const qs = useMemo(() => {
-    const open = s.mistakes.filter((m) => !m.resolved).sort((a, b) => a.reviewCount - b.reviewCount || b.ts - a.ts);
+    // Spaced re-check: mistakes that are due come first; an optional ?cat= focuses one Error Bank category.
+    const open = s.mistakes.filter((m) => !m.resolved && (!cat || m.cat === cat)).sort((a, b) => Number(mistakeDue(b)) - Number(mistakeDue(a)) || a.reviewCount - b.reviewCount || b.ts - a.ts);
     return open.map((m) => buildPQ(m, c.vocab, c.grammar)).filter(Boolean).slice(0, 12) as PQ[];
   }, []);
   const [ans, setAns] = useState<Record<number, string>>({});
@@ -103,14 +108,14 @@ function PracticeMistakes() {
   const isOk = (q: PQ, i: number) => q.kind === "self" ? !!selfOk[i] : q.kind === "choice" ? (ans[i] || "").toUpperCase() === String(q.answer).toUpperCase() : checkGap(ans[i] || "", q.answer, q.limit).ok;
   const finish = async () => {
     setDone(true);
-    const items: ItemResult[] = qs.map((q, i) => ({ qid: q.m.qid, ok: isOk(q, i), your: ans[i] || (q.kind === "self" ? (selfOk[i] ? "(self: correct)" : "(self: wrong)") : ""), correct: Array.isArray(q.answer) ? q.answer[0] : q.answer, prompt: q.m.prompt, qtype: q.m.qtype, tag: q.m.tag, explanation: q.m.explanation, difficulty: q.m.difficulty, skill: q.m.skill, ref: q.m.ref }));
+    const items: ItemResult[] = qs.map((q, i) => ({ qid: q.m.qid, ok: isOk(q, i), your: ans[i] || (q.kind === "self" ? (selfOk[i] ? "(self: correct)" : "(self: wrong)") : ""), correct: Array.isArray(q.answer) ? q.answer[0] : q.answer, prompt: q.m.prompt, qtype: q.m.qtype, tag: q.m.tag, explanation: q.m.explanation, difficulty: q.m.difficulty, skill: q.m.skill, ref: q.m.ref, cat: q.m.cat, axis: q.kind === "choice" ? "rec" as const : "prod" as const }));
     const correct = items.filter((x) => x.ok).length;
     await recordAttempt({ ts: Date.now(), skill: "R", kind: "mistakes", ref: "mistakes", title: "Practice My Mistakes", correct, total: items.length, band: null, secs: Math.round(secs), byType: {}, tags: {} }, items);
     toast(`${correct}/${items.length} correct. Mistakes answered correctly twice are resolved.`);
   };
   return (
     <>
-      <div className="page-head"><div><a className="small" href="#/mistakes">← My Mistakes</a><h1>Practice My Mistakes</h1><p className="sub">{qs.length} questions rebuilt from your previous errors. Get each one right twice to resolve it.</p></div></div>
+      <div className="page-head"><div><a className="small" href="#/mistakes">← My Mistakes</a><h1>Practice My Mistakes{cat ? ` · ${catLabel(cat)}` : ""}</h1><p className="sub">{qs.length} questions rebuilt from your previous errors. Get each one right twice to resolve it. Correct answers come back after 1, 3 and 7 days.</p></div></div>
       <div className="card stack">
         {qs.map((q, i) => {
           const ok = done ? isOk(q, i) : null;
@@ -118,7 +123,7 @@ function PracticeMistakes() {
             <div key={q.m.id} className={"q" + (done ? (ok ? " ok" : " no") : "")}>
               <span className="qn">{i + 1}</span>
               <div className="stack" style={{ gap: 6, minWidth: 0 }}>
-                <div className="row" style={{ gap: 6 }}><span className="chip">{SKILL_NAME[q.m.skill]}</span><span className="chip bad">{TAG_LABEL[q.m.tag] || q.m.tag}</span>{q.m.reviewOk > 0 && <span className="chip good">1/2 correct</span>}</div>
+                <div className="row" style={{ gap: 6 }}><span className="chip">{SKILL_NAME[q.m.skill]}</span><span className="chip bad">{q.m.cat ? catLabel(q.m.cat) : TAG_LABEL[q.m.tag] || q.m.tag}</span>{q.m.reviewOk > 0 && <span className="chip good">1/2 correct</span>}</div>
                 {q.context && <details><summary className="small">Show the paragraph</summary><p className="small" style={{ fontFamily: "var(--display)" }}>{q.context}</p></details>}
                 {q.audio && <div><button className="btn sm" onClick={() => speak(q.audio!, s.settings.accent, 1)}><Icon name="play" />Play the relevant part</button> <span className="tiny muted">Device voice</span></div>}
                 <div>{q.prompt}</div>

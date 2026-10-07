@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { addMistakes, deleteWriting, getState, saveWriting, useStore } from "../lib/store";
+import { addAiFeedbackMistakes, addFeedbackMistakes, deleteWriting, getState, reviewSkillItem, saveWriting, useStore } from "../lib/store";
+import { catOfLocal, topicsOfCat } from "../lib/taxonomy";
 import { getContent, usePacksVersion } from "../lib/packs";
 import type { Writing } from "../lib/types";
 import { analyseWriting } from "../lib/localWriting";
@@ -140,6 +141,11 @@ function Editor({ w }: { w: Writing }) {
     if (words < 20) { toast("Write at least a few sentences before submitting."); return; }
     const cur = getState().writings.find((x) => x.id === w.id) || w;
     await saveWriting({ ...cur, text, secs: Math.round(base.current + secs), status: "submitted", submittedAt: Date.now() });
+    // Feed the local checker's findings into the Error Bank (idempotent per essay) and mark grammar structures that failed in real writing.
+    const issues = analyseWriting(text, w.task, /informal/i.test(w.promptType) ? "informal" : "formal").issues;
+    const items = issues.map((i) => ({ original: i.match || i.text, correction: i.fix, explanation: i.text, cat: catOfLocal(i.cat), raw: i.cat }));
+    await addFeedbackMistakes({ skill: "W", id: w.id, label: w.promptType }, items, "local-writing");
+    for (const cat of new Set(items.map((i) => i.cat))) for (const t of topicsOfCat(cat).slice(0, 1)) await reviewSkillItem("g:" + t, "prod", 0, { task: "writing", cat, label: t, noError: true, usedInWriting: true });
     toast("Submitted. Local checks are ready.");
   };
   const exportTxt = () => downloadFile(`IELTS-Writing-Task${w.task}-${slug(w.promptType)}-${new Date().toISOString().slice(0, 10)}.txt`, `${w.promptText}\n\n----\n\n${text}\n\n(${words} words)`, "text/plain");
@@ -198,7 +204,7 @@ function AfterSubmit({ w, report }: { w: Writing; report: ReturnType<typeof anal
           <CopyToClaude prompt={prompt} label="Copy evaluation prompt" />
           <ImportFeedback skill="writing" onImport={async (fb) => {
             await saveWriting({ ...(getState().writings.find((x) => x.id === w.id) || w), ai: fb });
-            await addMistakes(fb.errors.slice(0, 15).map((e) => ({ ts: Date.now(), skill: "W", ref: w.id, qid: `w:${w.id}:${e.original.slice(0, 40)}`, qtype: e.category, tag: e.category, difficulty: `Task ${w.task}`, prompt: e.original, your: e.original, correct: e.correction, explanation: e.explanation || "", resolved: false, reviewOk: 0, reviewCount: 0 })));
+            await addAiFeedbackMistakes("W", w.id, w.promptType, fb);
           }} /></div>
       </div>
       {w.ai && <div className="card span2"><FeedbackView fb={w.ai} self={w.self} original={w.text} skill="writing" task={w.task} /></div>}

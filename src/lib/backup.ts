@@ -4,7 +4,7 @@ import { getState, loadAll, setKV } from "./store";
 import type { StoreName } from "./db";
 import { todayKey } from "./util";
 
-export const SCHEMA = 1;
+export const SCHEMA = 2; // v2 adds errors, reviews, skillItems. Backups from schema 1 still import (missing stores are treated as empty).
 export const APP_ID = "IELTS Mastery";
 const DEVICE_KV = new Set(["packs", "packIndex", "lastBackup", "swVersion"]); // device-specific, never imported
 

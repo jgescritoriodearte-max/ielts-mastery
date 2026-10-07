@@ -1,9 +1,10 @@
 /* IndexedDB wrapper. All user data lives here (never localStorage). */
 export const DB_NAME = "ielts-mastery";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2; // v2 adds errors, reviews, skillItems (additive; no existing record is changed)
 export const STORES = [
   "kv", "attempts", "itemStats", "mistakes", "vocab", "writings",
   "recordings", "sessions", "mocks", "external", "customPacks",
+  "errors", "reviews", "skillItems",
 ] as const;
 export type StoreName = (typeof STORES)[number];
 

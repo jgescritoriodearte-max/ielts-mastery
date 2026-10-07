@@ -5,6 +5,7 @@ import type { Skill } from "./types";
 import { accuracyByType, estimates, grammarAccuracy, tagCounts, vocabCounts } from "./stats";
 import { addDays, dateFromKey, daysBetween, mondayOf, todayKey } from "./util";
 import { TAG_LABEL } from "./scoring";
+import { CORE, diagnose, plannerWeights } from "./engine";
 
 export type Area = Skill | "V" | "G" | "X" | "M"; // X = review mistakes, M = mock
 export const AREA_NAME: Record<Area, string> = { L: "Listening", R: "Reading", W: "Writing", S: "Speaking", V: "Vocabulary", G: "Grammar", X: "Review mistakes", M: "Mock test" };
@@ -13,25 +14,11 @@ export interface PlanTask { id: string; area: Area; mins: number; title: string;
 export interface Rec { level: "high" | "medium" | "info"; text: string; action: string; route: string; }
 
 export function weights(s: State, c: Content): { w: Record<Area, number>; reasons: Record<string, string> } {
-  const e = estimates(s);
   const w: Record<Area, number> = { L: 1, R: 1, W: 1, S: 1, V: 0.6, G: 0.6, X: 0, M: 0 };
   const reasons: Record<string, string> = {};
-  for (const k of ["L", "R", "W", "S"] as Skill[]) {
-    const t = s.profile.skillTargets?.[k] ?? s.profile.target;
-    const b = e[k].band;
-    if (b == null) { w[k] = 2; reasons[k] = "No score yet - this builds your baseline."; continue; }
-    const gap = Math.max(0, t - b);
-    w[k] = 1 + 2 * gap;
-    if (gap > 0) reasons[k] = `Estimated ${b.toFixed(1)} vs target ${t.toFixed(1)} (gap ${gap.toFixed(1)}).`;
-    if (b >= t + 0.5) { w[k] *= 0.6; reasons[k] = `Above target (${b.toFixed(1)}) - maintenance only.`; }
-  }
-  const acc = accuracyByType(s, "R", Date.now() - 30 * 864e5);
-  const tf = ["True/False/Not Given", "Yes/No/Not Given"].reduce((n, t) => n + ((acc[t]?.[1] || 0) - (acc[t]?.[0] || 0)), 0);
-  if (tf > 3) { w.R += 1; reasons.R = (reasons.R ? reasons.R + " " : "") + `${tf} recent True/False/Not Given errors.`; }
-  const g = grammarAccuracy(s, Date.now() - 30 * 864e5).total;
-  if (g[1] >= 10 && g[0] / g[1] < 0.6) { w.G += 1.5; reasons.G = `Grammar accuracy ${Math.round((100 * g[0]) / g[1])}% (below 60%).`; }
-  const lastAi = s.writings.filter((x) => x.ai?.overall != null).sort((a, b) => (b.ai!.importedAt) - (a.ai!.importedAt))[0];
-  if (lastAi && (lastAi.ai!.overall as number) < 6.5) { w.W += 1.5; reasons.W = `Last imported Writing feedback: ${lastAi.ai!.overall}.`; }
+  // Adaptive Engine v2 (engine.ts): weight = importance (prior, fading with evidence) x weakness (bands/accuracy + Error Bank) x recency. All PROJECT ESTIMATES.
+  const eng = plannerWeights(s);
+  for (const k of CORE) { w[k] = eng.w[k]; reasons[k] = eng.reasons[k]; }
   const vc = vocabCounts(s, c.vocab.map((v) => v.id));
   if (vc.due > 0) { w.V += Math.min(1.5, vc.due / 20); reasons.V = `${vc.due} words due for review.`; }
   if (s.profile.prefer && w[s.profile.prefer as Area] != null) w[s.profile.prefer as Area] += 0.3;
@@ -70,6 +57,8 @@ export function dailyPlan(s: State, c: Content, minutes = s.profile.minutesDay |
   if (vc.due > 0) add("V", Math.min(15, 5 + Math.ceil(vc.due / 4)), "Vocabulary review (spaced repetition)", `${vc.due} words due today.`, "#/vocabulary/study/due");
   else if (minutes >= 45) add("V", 10, "Learn new words", "Build topic vocabulary for Writing and Speaking.", "#/vocabulary/study/new");
   if (openMistakes >= 5 && minutes >= 30) add("X", 10, "Practice My Mistakes", `${openMistakes} open mistakes waiting.`);
+  const dg = diagnose(s, c);
+  if (dg.best.kind !== "skill" && minutes >= 30 && left >= 20) add("X", dg.best.mins, dg.best.action, dg.best.reasons.join(" "), dg.best.route);
 
   const core: Area[] = mode === "weakness" ? (["L", "R", "W", "S", "G"] as Area[]).sort((a, b) => w[b] - w[a]).slice(0, 2) : ["L", "R", "W", "S", "G"];
   const total = core.reduce((a, k) => a + w[k], 0);

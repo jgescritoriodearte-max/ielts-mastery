@@ -2,6 +2,7 @@ import React from "react";
 import { useStore, setKV } from "../lib/store";
 import { getContent, usePacksVersion } from "../lib/packs";
 import { estimates, SOURCE_LABEL, streaks, vocabCounts } from "../lib/stats";
+import { diagnose } from "../lib/engine";
 import { AREA_NAME, dailyPlan, doneToday, recommendations, type PlanTask } from "../lib/planner";
 import { readiness, READINESS_NOTE } from "../lib/readiness";
 import { BandRuler, Disclaimer, Icon, SKILL_COLOR, Bar } from "../ui/components";
@@ -59,6 +60,7 @@ export function Dashboard() {
   const anyKnown = (["L", "R", "W", "S"] as Skill[]).some((k) => e[k].band != null);
   const weakest = (["L", "R", "W", "S"] as Skill[]).map((k) => ({ k, gap: e[k].band == null ? (anyKnown ? -9 : 0) : (s.profile.skillTargets?.[k] ?? s.profile.target) - (e[k].band as number), known: e[k].band != null })).sort((a, b) => b.gap - a.gap)[0];
   const ext = s.external.length;
+  const dg = diagnose(s, c);
   const ROUTE_OF: Record<string, string> = { L: "#/listening", R: "#/reading", W: "#/writing", S: "#/speaking" };
   const mainRec = recs.find((r) => r.route.startsWith(ROUTE_OF[weakest.k])) || recs[0];
   const otherRecs = recs.filter((r) => r !== mainRec);
@@ -118,10 +120,15 @@ export function Dashboard() {
 
       <div className="grid g2">
         <div className="card stack">
-          <div className="eyebrow">Your biggest weakness</div>
-          {weakest.known ? <h2>{SKILL_NAME[weakest.k]} — {fmtBand(e[weakest.k].band)} vs {(s.profile.skillTargets?.[weakest.k] ?? s.profile.target).toFixed(1)}</h2> : <h2>{SKILL_NAME[weakest.k]} — no data yet</h2>}
-          {mainRec ? <><p>{mainRec.text}</p><div className="callout accent"><Icon name="arrow" /><div style={{ flex: 1 }}><b>Recommended session:</b> {mainRec.action}</div><a className="btn sm primary" href={mainRec.route}>Start</a></div></>
-            : <p className="muted">Practise for a few days and the app will detect patterns in your errors.</p>}
+          <div className="eyebrow">Your biggest deficiency right now</div>
+          <h2>{dg.best.label}</h2>
+          <p className="small">{dg.best.reasons.join(" ")}</p>
+          <div className="callout accent"><Icon name="arrow" /><div style={{ flex: 1 }}><b>Most useful activity:</b> {dg.best.action} (~{dg.best.mins} min)</div><a className="btn sm primary" href={dg.best.route}>Start</a></div>
+          <details><summary className="small">Why? Area priorities</summary>
+            <div className="table-wrap"><table className="t"><thead><tr><th>Area</th><th>Importance</th><th>Weakness</th><th>Recency</th><th>Priority</th></tr></thead><tbody>
+              {dg.areas.map((a) => <tr key={a.area}><td>{a.label}</td><td className="num">{a.importance.toFixed(2)}</td><td className="num">{a.weakness.toFixed(2)}</td><td className="num">{a.recency.toFixed(2)}</td><td className="num"><b>{a.score.toFixed(2)}</b></td></tr>)}
+            </tbody></table></div>
+            <p className="tiny muted">Priority = importance × weakness × recency. Importance starts from your stated profile (Writing highest; Grammar and Listening very high; Reading and Speaking maintenance) and relaxes as real data accumulates. All weights are PROJECT ESTIMATES, not research results; you can change the starting priorities in Settings.</p></details>
         </div>
         <div className="card stack">
           <div className="row between"><h3>You should study this</h3><span className="small muted">from your results</span></div>

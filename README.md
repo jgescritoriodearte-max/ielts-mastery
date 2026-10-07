@@ -225,3 +225,7 @@ build.mjs   build (esbuild) + pacotes + service worker
 .github/workflows/deploy.yml
 AUDIT.md    relatório de auditoria do release
 ```
+
+
+## IELTS Mastery 2.0 — P0 core
+Error Bank, two-axis SRS (recognition/production), Production Lab and Adaptive Engine v2 are one integrated core. See [docs/P0-ARCHITECTURE.md](docs/P0-ARCHITECTURE.md) (architecture, database v2, list of project estimates, tests).
