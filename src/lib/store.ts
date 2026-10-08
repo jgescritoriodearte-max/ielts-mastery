@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { todayKey, uid } from "./util";
 import { categorize, catAreas, catOfAi, catOfGrammarTopic, catOfLocal, catLabel } from "./taxonomy";
+import { conceptOfQid, conceptOfText } from "./concepts";
 import { moveEvent, nextMistakeState, recordCorrect, recordError } from "./errorbank";
 import { blankAxis, daysToExamOf, gradeAxis, stepAxis, type Axis, type Grade } from "./srs";
 
@@ -135,6 +136,7 @@ export interface ItemResult {
   axis?: Axis;             // which SRS axis this answer exercises (rec = recognise, prod = produce), when known
   ms?: number;             // response time in ms, when measured
   src?: string;            // origin label stored with the error (quiz, production, mistakes...)
+  concept?: string;        // specific grammar concept (lesson id); derived from the qid of lesson items when absent
 }
 
 /* ---------------- Error Bank + review log helpers (all writes go through here) ---------------- */
@@ -145,10 +147,10 @@ const newReview = (r: Omit<Review, "id" | "updatedAt">): Review => ({ ...r, id: 
 async function flushReviews(rs: Review[]) { if (!rs.length) return; state.reviews = [...state.reviews, ...rs]; await db.putMany("reviews", rs); }
 
 /** Registers an error or a correct answer in the Error Bank. */
-function noteResult(cat: string, area: string, ok: boolean, src: string, now: number, ex?: { a: string; b: string }) {
+function noteResult(cat: string, area: string, ok: boolean, src: string, now: number, ex?: { a: string; b: string }, concept?: string) {
   const prev = state.errors[cat];
-  if (!ok) stageError(recordError(prev, cat, area, src, now, ex));
-  else stageError(recordCorrect(prev, now));
+  if (!ok) stageError(recordError(prev, cat, area, src, now, ex, concept));
+  else stageError(recordCorrect(prev, now, concept));
 }
 
 export async function recordAttempt(a: Omit<Attempt, "id" | "updatedAt">, items: ItemResult[]): Promise<Attempt> {
@@ -162,6 +164,7 @@ export async function recordAttempt(a: Omit<Attempt, "id" | "updatedAt">, items:
   const topicRes: Record<string, [number, number]> = {};
   for (const r of items) {
     const cat = categorize(r);
+    const concept = r.concept || conceptOfQid(r.qid);
     const prev = state.itemStats[r.qid] || { id: r.qid, c: 0, w: 0, last: 0, lastOk: false, updatedAt: 0 };
     const s: ItemStat = { id: r.qid, c: prev.c + (r.ok ? 1 : 0), w: prev.w + (r.ok ? 0 : 1), last: now, lastOk: r.ok, updatedAt: now };
     state.itemStats[r.qid] = s;
@@ -177,20 +180,20 @@ export async function recordAttempt(a: Omit<Attempt, "id" | "updatedAt">, items:
         const m: Mistake = {
           id: uid("m-"), updatedAt: now, ts: now, skill: r.skill, ref: r.ref, qid: r.qid, qtype: r.qtype, tag: r.tag,
           difficulty: r.difficulty, prompt: r.prompt, your: r.your || "(blank)", correct: r.correct,
-          explanation: r.explanation, resolved: false, reviewOk: 0, reviewCount: 0, cat, src,
+          explanation: r.explanation, resolved: false, reviewOk: 0, reviewCount: 0, cat, src, ...(concept ? { concept } : {}),
           due: nextMistakeState({ reviewOk: 0, reviewCount: 0 } as Mistake, false).due,
           ...(r.skill === "L" ? { cause: cat } : {}),
         };
         mistakes.unshift(m); mistakeUpd.push(m);
       }
-      noteResult(cat, r.skill, false, src, now, { a: String(r.your || "").slice(0, 140), b: String(Array.isArray(r.correct) ? r.correct[0] : r.correct || "").slice(0, 140) });
+      noteResult(cat, r.skill, false, src, now, { a: String(r.your || "").slice(0, 140), b: String(Array.isArray(r.correct) ? r.correct[0] : r.correct || "").slice(0, 140) }, concept);
     } else {
       if (openIdx >= 0) {
         const old = mistakes[openIdx];
         const m = { ...old, ...nextMistakeState(old, true), updatedAt: now };
         mistakes[openIdx] = m; mistakeUpd.push(m);
       }
-      noteResult(openIdx >= 0 ? (mistakes[openIdx].cat || cat) : cat, r.skill, true, src, now);
+      noteResult(openIdx >= 0 ? (mistakes[openIdx].cat || cat) : cat, r.skill, true, src, now, undefined, concept || (openIdx >= 0 ? mistakes[openIdx].concept : undefined));
     }
     if (r.axis) reviews.push(newReview({ ts: now, item: r.qid, kind: "mistake", axis: r.axis, task: src, ok: r.ok, grade: r.ok ? 2 : 0, ms: r.ms || 0, cat }));
     if (r.skill === "G") { const m = r.qid.match(/^g:([^:]+):/); if (m) { const o = topicRes[m[1]] || [0, 0]; topicRes[m[1]] = [o[0] + (r.ok ? 1 : 0), o[1] + 1]; } }
@@ -225,13 +228,13 @@ export async function reviewVocab(id: string, axis: Axis, g: Grade, o: { task: s
 }
 
 /** Grades one axis of a grammar structure (SkillItem "g:<topic>"). */
-export async function reviewSkillItem(id: string, axis: Axis, g: Grade, o: { task: string; ms?: number; cat: string; label: string; noError?: boolean; ex?: { a: string; b: string }; usedInWriting?: boolean }): Promise<void> {
+export async function reviewSkillItem(id: string, axis: Axis, g: Grade, o: { task: string; ms?: number; cat: string; label: string; noError?: boolean; ex?: { a: string; b: string }; usedInWriting?: boolean; concept?: string }): Promise<void> {
   const now = Date.now();
   const prev = state.skillItems[id] || { id, updatedAt: 0, kind: "grammar" as const, cat: o.cat, label: o.label, rec: blankAxis(), prod: blankAxis(), writing: { uses: 0, errors: 0, last: 0 } };
   const next: SkillItem = { ...prev, [axis]: stepAxis(prev[axis], g, o.ms || 0, daysToExamOf(state.profile.examDate)), updatedAt: now };
   if (o.usedInWriting) next.writing = { uses: prev.writing.uses + 1, errors: prev.writing.errors + (g === 0 ? 1 : 0), last: now };
   state.skillItems = { ...state.skillItems, [id]: next };
-  if (!o.noError) noteResult(o.cat, "G", g > 0, o.task, now, g === 0 ? o.ex : undefined);
+  if (!o.noError) noteResult(o.cat, "G", g > 0, o.task, now, g === 0 ? o.ex : undefined, o.concept);
   emit();
   await db.put("skillItems", next);
   await flushErrors();
@@ -239,15 +242,15 @@ export async function reviewSkillItem(id: string, axis: Axis, g: Grade, o: { tas
 }
 
 /** Turns feedback items (imported Claude feedback or the local checker) into practice items AND Error Bank events. Idempotent by qid. */
-export async function addFeedbackMistakes(origin: { skill: "W" | "S"; id: string; label: string }, list: { original: string; correction: string; explanation?: string; cat: string; raw?: string }[], src: string): Promise<number> {
+export async function addFeedbackMistakes(origin: { skill: "W" | "S"; id: string; label: string }, list: { original: string; correction: string; explanation?: string; cat: string; raw?: string; concept?: string }[], src: string): Promise<number> {
   const now = Date.now();
   const have = new Set(state.mistakes.map((m) => m.qid));
   const recs: Mistake[] = [];
   list.forEach((e, i) => {
     const qid = `${src}:${origin.id}:${i}`;
     if (have.has(qid) || !e.original) return;
-    recs.push({ id: uid("m-"), updatedAt: now, ts: now, skill: origin.skill, ref: origin.id, qid, qtype: catLabel(e.cat), tag: e.raw || e.cat, difficulty: "", prompt: e.original, your: e.original, correct: e.correction || "", explanation: e.explanation || "", resolved: false, reviewOk: 0, reviewCount: 0, cat: e.cat, src, due: todayKey() });
-    noteResult(e.cat, origin.skill, false, src, now, { a: e.original, b: e.correction || "" });
+    recs.push({ id: uid("m-"), updatedAt: now, ts: now, skill: origin.skill, ref: origin.id, qid, qtype: catLabel(e.cat), tag: e.raw || e.cat, difficulty: "", prompt: e.original, your: e.original, correct: e.correction || "", explanation: e.explanation || "", resolved: false, reviewOk: 0, reviewCount: 0, cat: e.cat, src, due: todayKey(), ...(e.concept ? { concept: e.concept } : {}) });
+    noteResult(e.cat, origin.skill, false, src, now, { a: e.original, b: e.correction || "" }, e.concept);
   });
   if (!recs.length) return 0;
   state.mistakes = [...recs, ...state.mistakes];
@@ -257,7 +260,7 @@ export async function addFeedbackMistakes(origin: { skill: "W" | "S"; id: string
   return recs.length;
 }
 export const addAiFeedbackMistakes = (skill: "W" | "S", id: string, label: string, fb: AiFeedback) =>
-  addFeedbackMistakes({ skill, id, label }, fb.errors.map((e) => ({ original: e.original, correction: e.correction, explanation: e.explanation, cat: catOfAi(e.category, skill), raw: e.category })), skill === "W" ? "ai-writing" : "ai-speaking");
+  addFeedbackMistakes({ skill, id, label }, fb.errors.map((e) => ({ original: e.original, correction: e.correction, explanation: e.explanation, cat: catOfAi(e.category, skill), raw: e.category, concept: conceptOfText(e.category + " " + (e.explanation || "")) })), skill === "W" ? "ai-writing" : "ai-speaking");
 
 /** The user refines WHY a Listening answer was missed (or any category): moves the error between categories. */
 export async function setMistakeCategory(id: string, cat: string): Promise<void> {

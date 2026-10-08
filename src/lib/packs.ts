@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { getState, setKV, subscribe as subStore } from "./store";
 import type { Group, QSet } from "./types";
+import type { Lesson } from "./lessons";
 
 export interface PackEntry {
   id: string; title: string; kind: string; version: string; essential: boolean;
@@ -118,13 +119,13 @@ export async function audioUrl(packId: string, file: string): Promise<string | n
 /* ---------------- Content registry ---------------- */
 export interface Content {
   listening: QSet[]; reading: QSet[];
-  grammar: any[]; vocab: { id: string; cat: string; w: string[]; custom?: boolean }[];
+  grammar: any[]; lessons: Lesson[]; vocab: { id: string; cat: string; w: string[]; custom?: boolean }[];
   prompts: any | null; mocks: any[]; mockSets: Record<string, QSet>; paraphrase: any[];
   audio: Record<string, { pack: string; file: string; dur: number; marks: number[] }>;
   maps: Record<string, any>;
   missing: string[];
 }
-let content: Content = { listening: [], reading: [], grammar: [], vocab: [], prompts: null, mocks: [], mockSets: {}, paraphrase: [], audio: {}, maps: {}, missing: [] };
+let content: Content = { listening: [], reading: [], grammar: [], lessons: [], vocab: [], prompts: null, mocks: [], mockSets: {}, paraphrase: [], audio: {}, maps: {}, missing: [] };
 export const getContent = () => content;
 
 /* Difficulty levels: Level 1 (≈5.5) … Level 5 (7.5+). Older sets used descriptive names; they are mapped here. */
@@ -136,7 +137,7 @@ const tagSets = (sets: any[], skill: "L" | "R", packId: string, generated = fals
   sets.map((s) => { const band = bandOfSet(s); return { ...s, band, level: BAND_LEVEL[String(band)] || s.level, skill, packId, generated, groups: s.groups as Group[] }; });
 
 export async function buildContent(): Promise<void> {
-  const c: Content = { listening: [], reading: [], grammar: [], vocab: [], prompts: null, mocks: [], mockSets: {}, paraphrase: [], audio: {}, maps: {}, missing: [] };
+  const c: Content = { listening: [], reading: [], grammar: [], lessons: [], vocab: [], prompts: null, mocks: [], mockSets: {}, paraphrase: [], audio: {}, maps: {}, missing: [] };
   const ids = index.length ? index.map((p) => p.id) : Object.keys(packMeta());
   for (const id of ids) {
     const p = await loadPack(id);
@@ -146,7 +147,7 @@ export async function buildContent(): Promise<void> {
     const gen = /AI-generated/i.test(p.label || "");
     if (p.kind === "listening") c.listening.push(...tagSets(p.data.sets, "L", id, gen));
     else if (p.kind === "reading") c.reading.push(...tagSets(p.data.sets, "R", id, gen));
-    else if (p.kind === "grammar") c.grammar.push(...p.data.topics);
+    else if (p.kind === "grammar") { c.grammar.push(...p.data.topics); c.lessons.push(...(p.data.lessons || [])); }
     else if (p.kind === "vocabulary") for (const [cat, words] of Object.entries<any[]>(p.data.categories)) words.forEach((w) => c.vocab.push({ id: `${cat}:${w[0]}`, cat, w }));
     else if (p.kind === "prompts") c.prompts = p.data;
     else if (p.kind === "paraphrase") c.paraphrase.push(...(p.data.items || []));

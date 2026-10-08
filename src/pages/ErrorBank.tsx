@@ -4,6 +4,8 @@ import { classify, load, RECUR_MIN, RECUR_WINDOW_DAYS, CONSOLIDATED_STREAK, QUIE
 import { catDef, catLabel } from "../lib/taxonomy";
 import { fmtDate } from "../lib/util";
 import { Empty, HBars } from "../ui/components";
+import { getContent } from "../lib/packs";
+import { CONCEPTS } from "../lib/concepts";
 
 const AREAS: [string, string][] = [["All", "All skills"], ["W", "Writing"], ["G", "Grammar"], ["L", "Listening"], ["R", "Reading"], ["S", "Speaking"], ["V", "Vocabulary"]];
 const STATUS_CHIP: Record<string, string> = { weak: "bad", developing: "warn", consolidated: "good" };
@@ -48,12 +50,13 @@ export function ErrorBankPage() {
           {shown.map(({ st, cls, def, openM }) => (
             <React.Fragment key={st.id}>
               <tr>
-                <td><b>{def.label}</b><div className="tiny muted">{def.group} · {def.areas.join("/")}</div></td>
+                <td><b>{def.label}</b><div className="tiny muted">{def.group} · {def.areas.join("/")}</div>{st.concepts && (Object.entries(st.concepts) as [string, { n: number; w: number[] }][]).filter(([id]) => CONCEPTS[id]).sort((a, b) => b[1].n - a[1].n).map(([id, c]) => <div key={id} className="tiny"><a href={`#/grammar/lesson/${id}`}>{CONCEPTS[id].title}</a> <span className="muted">×{c.n}{c.w?.length ? ` · ${c.w.length} in writing` : ""}</span></div>)}</td>
                 <td><span className={"chip " + STATUS_CHIP[cls.status]}>{cls.status}</span></td>
                 <td className="small">{cls.recurring ? "recurring" : "occasional"}{cls.relapsed ? " · relapse" : ""}</td>
                 <td className="num">{cls.recent}</td><td className="num">{st.total}</td><td className="num">{st.streak}</td>
                 <td className="num small">{st.last ? fmtDate(st.last) : "–"}</td>
                 <td><div className="row" style={{ gap: 6 }}>
+                  {(() => { const ls = getContent().lessons.filter((l) => l.cat === st.cat); if (!ls.length) return null; const best = ls.slice().sort((a, b) => (st.concepts?.[b.id]?.n || 0) - (st.concepts?.[a.id]?.n || 0))[0]; return <a className="btn sm primary" href={`#/grammar/lesson/${best.id}`} title={best.title}>Learn</a>; })()}
                   {openM > 0 && <a className="btn sm" href={`#/mistakes/practice?cat=${encodeURIComponent(st.cat)}`}>Drill ({openM})</a>}
                   <a className="btn sm primary" href={`#/produce?cat=${encodeURIComponent(st.cat)}`}>Produce</a>
                   {st.ex.length > 0 && <button className="btn sm ghost" onClick={() => setOpen(open === st.id ? null : st.id)}>{open === st.id ? "Hide" : "Examples"}</button>}</div></td>

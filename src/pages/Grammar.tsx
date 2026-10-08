@@ -4,12 +4,16 @@ import { getContent, usePacksVersion } from "../lib/packs";
 import { grammarAccuracy } from "../lib/stats";
 import { shuffle } from "../lib/util";
 import { AiLabel, Bar, Empty, Icon, toast, useStopwatch } from "../ui/components";
+import { LessonPage, MasteryChips, RetestPage } from "./Lesson";
+import { conceptEvidence, lessonMode, masteryOf } from "../lib/lessons";
 
 export function GrammarPage({ parts }: { parts: string[] }) {
   usePacksVersion();
   const topics = getContent().grammar;
   if (!topics.length) return <Empty>The Grammar Pack is not on this device. <a href="#/library">Download it</a>.</Empty>;
   if (parts[0] === "mixed") return <Mixed />;
+  if (parts[0] === "lesson" && parts[1]) return <LessonPage id={parts[1]} />;
+  if (parts[0] === "retest" && parts[1]) return <RetestPage id={parts[1]} />;
   if (parts[0]) {
     const t = topics.find((x: any) => x.id === parts[0]);
     if (!t) return <Empty>Topic not found. <a href="#/grammar">Back</a></Empty>;
@@ -26,6 +30,8 @@ function GrammarHome() {
     <>
       <div className="page-head"><div><h1>Grammar</h1><p className="sub">Lessons, examples and progressive exercises for Band 7+. Each answer explains why the wrong options are wrong and shows a more natural way to write it.</p><div style={{ marginTop: 6 }}><AiLabel /></div></div>
         <div className="row"><a className="btn primary" href="#/grammar/mixed"><Icon name="refresh" />Mixed practice (weak topics first)</a><a className="btn" href="#/ai/generate/grammar"><Icon name="ai" />More via Claude</a></div></div>
+      <LessonCards />
+      <h2 style={{ marginTop: 18 }}>Train me · topics and exercises</h2>
       <div className="grid g-auto">
         {topics.map((t: any) => {
           const a = acc[t.title];
@@ -41,6 +47,38 @@ function GrammarHome() {
         })}
       </div>
     </>
+  );
+}
+
+const TOPIC_LESSONS: Record<string, string[]> = { tenses: ["present-simple-vs-continuous", "past-simple-vs-present-perfect"], "present-perfect": ["past-simple-vs-present-perfect"], articles: ["articles"] };
+
+/** TEACH ME: explanatory lessons (prototype: 3). Each card shows the four mastery stages and what kind of help is needed now. */
+function LessonCards() {
+  const s = useStore();
+  const lessons = getContent().lessons;
+  const now = Date.now();
+  if (!lessons.length) return <div className="card small muted">Explanatory lessons are not on this device yet: open the <a href="#/library">Offline Library</a> and update the Grammar Pack.</div>;
+  return (
+    <div className="stack">
+      <div className="row between"><h2>Teach me · explanatory lessons</h2><span className="tiny muted">Prototype: 3 lessons. Explain → check → practise → produce → write → test.</span></div>
+      <div className="grid g-auto">
+        {lessons.map((l) => {
+          const p = s.kv.lessonProgress?.[l.id];
+          const ev = conceptEvidence(s.errors[l.cat], l.id, now);
+          const a = s.skillItems["g:" + l.id]?.prod;
+          const mode = lessonMode(p, ev, !!a && a.seen > 0 && a.due <= new Date().toISOString().slice(0, 10), now);
+          const m = masteryOf(p, ev);
+          return (
+            <a key={l.id} className="card stack" href={`#/grammar/lesson/${l.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="row between"><h3>{l.title}</h3><span className="chip accent">{mode.label}</span></div>
+              <MasteryChips m={m} />
+              <span className="small muted">{mode.why}</span>
+              <span className="tiny muted">{l.minutes} min · {l.level}{ev.recent ? ` · ${ev.recent} error${ev.recent > 1 ? "s" : ""} in 14 days` : ""}</span>
+            </a>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -97,6 +135,12 @@ function Topic({ t }: { t: any }) {
   return (
     <>
       <div className="page-head"><div><a className="small" href="#/grammar">← Grammar</a><h1>{t.title}</h1><p className="sub">{t.summary}</p></div>{t.generated && <AiLabel />}</div>
+      {(TOPIC_LESSONS[t.id] || []).length > 0 && (
+        <div className="card row between" style={{ borderColor: "var(--accent)" }}>
+          <span className="small"><b>Want to understand WHY, not only memorise?</b> This topic has a full explanatory lesson.</span>
+          <span className="row">{(TOPIC_LESSONS[t.id] || []).map((id) => <a key={id} className="btn sm primary" href={`#/grammar/lesson/${id}`}>{getContent().lessons.find((x) => x.id === id)?.title || id}</a>)}</span>
+        </div>
+      )}
       <div className="grid g2">
         <div className="card stack"><h2>Lesson</h2><ul style={{ margin: 0, paddingLeft: 18 }}>{t.rules.map((r: string, i: number) => <li key={i} style={{ marginBottom: 6 }}>{r}</li>)}</ul></div>
         <div className="card stack"><h2>Examples</h2>{t.examples.map((e: string, i: number) => <p key={i} style={{ fontFamily: "var(--display)", fontSize: "1.05rem" }}>“{e}”</p>)}</div>

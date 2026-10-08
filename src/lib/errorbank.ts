@@ -39,7 +39,9 @@ export function load(s: ErrorStat, now = Date.now(), area?: string): number {
 }
 
 /** Records one error. `area` is the skill the answer came from (W, G, L, R, S, V, P). */
-export function recordError(prev: ErrorStat | undefined, cat: string, area: string, src: string, now: number, ex?: { a: string; b: string }): ErrorStat {
+export const CONCEPT_EVENTS = 20;
+const WRITING_SRC = /writing/;
+export function recordError(prev: ErrorStat | undefined, cat: string, area: string, src: string, now: number, ex?: { a: string; b: string }, concept?: string): ErrorStat {
   const s: ErrorStat = prev ? { ...prev, events: prev.events.slice(), eventAreas: prev.eventAreas.slice(), src: { ...prev.src }, ex: prev.ex.slice() } : blankStat(cat, area, now);
   if (prev && classify(prev, now).status === "consolidated") s.relapses += 1;
   s.events.push(now); s.eventAreas.push(area);
@@ -47,14 +49,21 @@ export function recordError(prev: ErrorStat | undefined, cat: string, area: stri
   s.total += 1; s.last = now; s.streak = 0; s.updatedAt = now;
   s.src[src] = (s.src[src] || 0) + 1;
   if (ex && (ex.a || ex.b)) { s.ex.push({ a: ex.a.slice(0, 140), b: ex.b.slice(0, 140) }); if (s.ex.length > 5) s.ex.shift(); }
+  if (concept) {
+    const all = { ...(prev?.concepts || {}) };
+    const c0 = all[concept] || { n: 0, last: 0, ev: [], w: [], streak: 0 };
+    const c = { n: c0.n + 1, last: now, ev: [...c0.ev, now].slice(-CONCEPT_EVENTS), w: WRITING_SRC.test(src) ? [...c0.w, now].slice(-CONCEPT_EVENTS) : c0.w, streak: 0 };
+    all[concept] = c; s.concepts = all;
+  }
   s.lastStatus = classify(s, now).status;
   return s;
 }
 
 /** A correct answer in a category that already has errors raises its streak. Categories never failed are not tracked (returns undefined). */
-export function recordCorrect(prev: ErrorStat | undefined, now: number): ErrorStat | undefined {
+export function recordCorrect(prev: ErrorStat | undefined, now: number, concept?: string): ErrorStat | undefined {
   if (!prev) return undefined;
   const s: ErrorStat = { ...prev, streak: prev.streak + 1, updatedAt: now };
+  if (concept && prev.concepts?.[concept]) s.concepts = { ...prev.concepts, [concept]: { ...prev.concepts[concept], streak: prev.concepts[concept].streak + 1 } };
   s.lastStatus = classify(s, now).status;
   return s;
 }

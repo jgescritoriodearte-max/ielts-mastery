@@ -22,7 +22,7 @@ function loadEsbuild() {
 const PACK_INFO = {
   "listening-01": { title: "IELTS Listening Pack 01", kind: "listening", essential: true, description: "4 practice recordings from Beginner to Advanced: form, sentence, table, summary, diagram, multiple choice, matching and short-answer questions." },
   "reading-01": { title: "IELTS Reading Pack 01", kind: "reading", essential: true, description: "Academic-style passages in five levels (≈5.5 to 7.5+) on science, history, environment, society, art and more, covering all IELTS question types." },
-  "grammar-01": { title: "IELTS Grammar Pack", kind: "grammar", essential: true, description: "23 grammar topics (A2-C1, focus B2/C1): lessons, examples and 300+ progressive exercises." },
+  "grammar-01": { title: "IELTS Grammar Pack", kind: "grammar", essential: true, description: "23 grammar topics (A2-C1, focus B2/C1): lessons, examples and 300+ progressive exercises, plus 3 explanatory TEACH/TRAIN/TEST lessons (prototype)." },
   "vocabulary-01": { title: "IELTS Vocabulary Pack", kind: "vocabulary", essential: true, description: "About 1,000 words and expressions: academic verbs, nouns and adjectives, IELTS topics, collocations, linking expressions, paraphrasing and Task 1 data language." },
   "prompts-01": { title: "Writing & Speaking Pack", kind: "prompts", essential: true, description: "Writing Task 1 (all chart types, processes and maps) and 70+ Task 2 prompts, a large Speaking Part 1-3 bank and shadowing sentences." },
   "listening-02": { title: "IELTS Listening Pack 02 · Parts 1-2", kind: "listening", essential: true, description: "Everyday conversations and monologues (Parts 1-2), levels 5.5 to 7.5: forms, notes, tables, multiple choice, matching and map labelling." },
@@ -38,6 +38,7 @@ async function writePacks() {
   const { GRAMMAR } = await imp("grammar.mjs");
   const { VOCAB } = await imp("vocabulary.mjs");
   const P = await imp("prompts.mjs");
+  const { LESSONS } = await imp("lessons.mjs");
   const { MOCKS } = await imp("mocks.mjs");
 
   // ---- extra banks (content/bank/*.mjs) ----
@@ -71,7 +72,7 @@ async function writePacks() {
     "listening-02": { data: { sets: [...lp[1], ...lp[2]], maps: extraMaps }, jobs: [...lp[1], ...lp[2]].map(lJob) },
     "listening-03": { data: { sets: [...lp[3], ...lp[4]], maps: extraMaps }, jobs: [...lp[3], ...lp[4]].map(lJob) },
     "reading-01": { data: { sets: [...READING_SETS.filter((s) => !s.mock), ...extraReading] }, jobs: [] },
-    "grammar-01": { data: { topics: grammar }, jobs: [] },
+    "grammar-01": { data: { topics: grammar, lessons: LESSONS }, jobs: [] },
     "vocabulary-01": { data: { categories: vocab }, jobs: [] },
     "paraphrase-01": { data: { items: paraphrase }, jobs: [] },
     "prompts-01": { data: { t1a: P2.WRITING_T1_ACADEMIC, t1gt: P2.WRITING_T1_GT, t2: P2.WRITING_T2, p1: P2.SPEAKING_P1, p2: P2.SPEAKING_P2, shadowing: P2.SHADOWING }, jobs: speakingClips },

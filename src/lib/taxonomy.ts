@@ -55,7 +55,7 @@ export const catAreas = (id: string) => catDef(id).areas;
 
 /* ---- mappers ---- */
 const TOPIC: Record<string, string> = {
-  tenses: "gr.tenses", "present-perfect": "gr.tenses", articles: "gr.articles", prepositions: "gr.prepositions", conditionals: "gr.conditionals",
+  tenses: "gr.tenses", "present-perfect": "gr.tenses", "present-simple-vs-continuous": "gr.tenses", "past-simple-vs-present-perfect": "gr.tenses", articles: "gr.articles", prepositions: "gr.prepositions", conditionals: "gr.conditionals",
   passive: "gr.passive", relative: "gr.relative", modals: "gr.modals", complex: "gr.complex", linking: "dc.cohesion", sva: "gr.sva",
   gerunds: "gr.verbpatterns", infinitives: "gr.verbpatterns", comparatives: "gr.comparatives", reported: "gr.reported", punctuation: "gr.punctuation",
   "word-formation": "lx.wordform", conjunctions: "gr.complex", quantifiers: "gr.countable", nominalisation: "lx.register", hedging: "lx.register",

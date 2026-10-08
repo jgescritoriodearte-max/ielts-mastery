@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { addAiFeedbackMistakes, addFeedbackMistakes, deleteWriting, getState, reviewSkillItem, saveWriting, useStore } from "../lib/store";
 import { catOfLocal, topicsOfCat } from "../lib/taxonomy";
+import { CONCEPTS } from "../lib/concepts";
 import { getContent, usePacksVersion } from "../lib/packs";
 import type { Writing } from "../lib/types";
 import { analyseWriting } from "../lib/localWriting";
@@ -143,9 +144,12 @@ function Editor({ w }: { w: Writing }) {
     await saveWriting({ ...cur, text, secs: Math.round(base.current + secs), status: "submitted", submittedAt: Date.now() });
     // Feed the local checker's findings into the Error Bank (idempotent per essay) and mark grammar structures that failed in real writing.
     const issues = analyseWriting(text, w.task, /informal/i.test(w.promptType) ? "informal" : "formal").issues;
-    const items = issues.map((i) => ({ original: i.match || i.text, correction: i.fix, explanation: i.text, cat: catOfLocal(i.cat), raw: i.cat }));
+    const items = issues.map((i) => ({ original: i.match || i.text, correction: i.fix, explanation: i.text, cat: catOfLocal(i.cat), raw: i.cat, concept: i.concept }));
     await addFeedbackMistakes({ skill: "W", id: w.id, label: w.promptType }, items, "local-writing");
-    for (const cat of new Set(items.map((i) => i.cat))) for (const t of topicsOfCat(cat).slice(0, 1)) await reviewSkillItem("g:" + t, "prod", 0, { task: "writing", cat, label: t, noError: true, usedInWriting: true });
+    // Grammar Learning Layer: a writing error on a taught concept marks that lesson's production axis (the Error Bank event above already carries the concept).
+    const concepts = new Set(items.map((i) => i.concept).filter(Boolean) as string[]);
+    for (const cat of new Set(items.map((i) => i.cat))) for (const t of topicsOfCat(cat).slice(0, 1)) if (!concepts.has(t)) await reviewSkillItem("g:" + t, "prod", 0, { task: "writing", cat, label: t, noError: true, usedInWriting: true });
+    for (const cid of concepts) await reviewSkillItem("g:" + cid, "prod", 0, { task: "writing", cat: CONCEPTS[cid].cat, label: cid, noError: true, usedInWriting: true, concept: cid });
     toast("Submitted. Local checks are ready.");
   };
   const exportTxt = () => downloadFile(`IELTS-Writing-Task${w.task}-${slug(w.promptType)}-${new Date().toISOString().slice(0, 10)}.txt`, `${w.promptText}\n\n----\n\n${text}\n\n(${words} words)`, "text/plain");

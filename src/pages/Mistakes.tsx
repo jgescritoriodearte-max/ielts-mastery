@@ -1,3 +1,4 @@
+import { learnTarget } from "../lib/concepts";
 import React, { useMemo, useState } from "react";
 import { recordAttempt, setMistakeCategory, setMistakeResolved, useStore, type ItemResult } from "../lib/store";
 import { catLabel, LISTENING_CAUSES } from "../lib/taxonomy";
@@ -51,7 +52,7 @@ function MistakesHome() {
           {list.slice(0, 200).map((m) => <tr key={m.id}><td className="num small">{fmtDate(m.ts)}</td><td>{SKILL_NAME[m.skill]}</td><td className="small" style={{ maxWidth: 300 }}>{m.prompt}</td><td className="small" style={{ color: "var(--bad)" }}>{m.your}</td><td className="small" style={{ color: "var(--good)" }}>{m.correct}</td><td>{m.skill === "L" && !m.resolved
               ? <select value={m.cat || "ls.other"} onChange={(e) => setMistakeCategory(m.id, e.target.value)} aria-label="Why did I miss it?" style={{ width: "auto", maxWidth: 220 }}>{[...new Set([m.cat || "ls.other", ...LISTENING_CAUSES])].map((c) => <option key={c} value={c}>{catLabel(c).replace("Listening: ", "")}</option>)}</select>
               : <span className="chip">{m.cat ? catLabel(m.cat) : TAG_LABEL[m.tag] || m.tag || m.qtype}</span>}</td><td className="small">{m.difficulty}</td>
-            <td><button className="btn sm ghost" onClick={() => setMistakeResolved(m.id, !m.resolved)}>{m.resolved ? "Reopen" : "Resolve"}</button></td></tr>)}
+            <td><div className="row" style={{ gap: 6 }}>{(() => { const lid = learnTarget(m, getContent().lessons); return lid ? <a className="btn sm primary" href={`#/grammar/lesson/${lid}`}>Learn</a> : null; })()}<button className="btn sm ghost" onClick={() => setMistakeResolved(m.id, !m.resolved)}>{m.resolved ? "Reopen" : "Resolve"}</button></div></td></tr>)}
         </tbody></table></div> : <Empty>{show === "open" ? "No open mistakes. Keep practising!" : "Nothing here."}</Empty>}
       </div>
     </>
@@ -78,7 +79,11 @@ function buildPQ(m: Mistake, vocab: any[], grammar: any[]): PQ | null {
   }
   if (m.skill === "G") {
     const [, tid, i] = m.qid.split(":");
-    const t = grammar.find((x) => x.id === tid); const e = t?.ex[Number(i)];
+    const t = grammar.find((x) => x.id === tid); let e = t?.ex[Number(i)];
+    if (!e) {   // a question from an explanatory lesson (qid g:<lessonId>:<itemId>)
+      const li = getContent().lessons.find((x) => x.id === tid)?.practice.concat(getContent().lessons.find((x) => x.id === tid)?.transfer.filter((x: any) => x.opts) as any || []).find((x: any) => x.id === i);
+      e = li ? { q: li.q, opts: li.opts, a: li.a } : undefined;
+    }
     if (!e) return null;
     return { m, kind: "choice", prompt: e.q, choices: e.opts.map((o: string, j: number) => ({ key: String(j), label: o })), answer: String(e.a) };
   }

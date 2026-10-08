@@ -105,6 +105,7 @@ export interface Mistake extends Rec {
   cause?: string;    // Listening: why the answer was missed (a taxonomy id); user-chosen or inferred from the tag
   due?: string;      // YYYY-MM-DD: next spaced re-check (project estimate schedule, see errorbank.ts)
   src?: string;      // origin: quiz, production, ai-writing, ai-speaking, local-writing
+  concept?: string;  // specific grammar concept (lesson id), when known; the general category stays in `cat`
   skill: AnySkill;
   ref: string;       // set id / grammar topic / vocab word id
   qid: string;
@@ -154,6 +155,8 @@ export interface ErrorStat extends Rec {
   streak: number; relapses: number; lastStatus: "weak" | "developing" | "consolidated";
   src: Record<string, number>;
   ex: { a: string; b: string }[];               // recent examples (wrong, correct)
+  /** Specific concepts inside the category (grammar lesson ids, e.g. "past-simple-vs-present-perfect"). Optional: old records lack it. `w` = events that came from Writing. */
+  concepts?: Record<string, { n: number; last: number; ev: number[]; w: number[]; streak: number }>;
 }
 
 export interface Criteria { [k: string]: number | null; }

@@ -1,5 +1,5 @@
 /* Offline writing checks. These are rule-based hints, NOT a band score. */
-export interface WIssue { cat: string; text: string; fix: string; match?: string; }
+export interface WIssue { cat: string; text: string; fix: string; match?: string; concept?: string; }
 export interface WReport {
   words: number; paragraphs: number; sentences: number; avgLen: number; longSentences: number; shortSentences: number;
   linkers: string[]; linkerCount: number; repeated: [string, number][]; issues: WIssue[]; checklist: { label: string; ok: boolean }[];
@@ -8,7 +8,9 @@ export interface WReport {
 const LINKERS = ["however", "moreover", "furthermore", "in addition", "therefore", "consequently", "as a result", "on the other hand", "in contrast", "nevertheless", "although", "even though", "whereas", "while", "despite", "in spite of", "for example", "for instance", "such as", "in conclusion", "to conclude", "overall", "firstly", "secondly", "finally", "because", "since", "which", "who", "unless", "provided that", "not only", "this means", "as a consequence", "in particular", "similarly", "likewise"];
 
 /* Common errors for Portuguese-speaking learners (pattern → explanation → better). */
-const RULES: [RegExp, string, string, string][] = [
+const PP = "(?:\\w+ed|been|seen|gone|done|made|taken|written|become|grown|risen|fallen|given|known|shown|begun|brought|come|found|met)";
+const FIN = "(?:yesterday|last (?:night|week|month|year|summer|weekend)|\\w+ ago|in (?:19|20)\\d\\d)";
+const RULES: [RegExp, string, string, string, string?][] = [
   [/\binformations\b/gi, "Countable/uncountable", "'Information' is uncountable.", "information / pieces of information"],
   [/\badvices\b/gi, "Countable/uncountable", "'Advice' is uncountable.", "advice / pieces of advice"],
   [/\bknowledges\b/gi, "Countable/uncountable", "'Knowledge' is uncountable.", "knowledge"],
@@ -26,7 +28,16 @@ const RULES: [RegExp, string, string, string][] = [
   [/\bsince \d+ (years|months|days)\b/gi, "Prepositions", "Use 'for' with a period of time.", "for 5 years"],
   [/\baccording with\b/gi, "Prepositions", "'According to'.", "according to"],
   [/\bin the other hand\b/gi, "Linking words", "Fixed phrase: 'on the other hand'.", "on the other hand"],
-  [/\b(the )?(society|nature|education|technology) (is|has|plays)\b/gi, "Articles", "Check articles: general ideas take no article ('Society is…', 'Education plays…').", "Education plays / Society is"],
+  [/\bthe (society|nature|education|technology|pollution|poverty|crime|health|knowledge) (is|has|plays|can|will|affects|helps)\b/gi, "Articles", "General ideas take no article ('Education plays…', not 'The education plays…'). Check: is it specific?", "Education plays / Technology can", "articles"],
+  [/\ban (university|european|useful|unit|unique|uniform|user)\b|\ba (hour|honest|honour|heir)\b/gi, "Articles", "a / an follows the SOUND, not the letter.", "a university / an hour", "articles"],
+  [/\bthe (my|your|his|her|their|our)\b/gi, "Articles", "A possessive replaces the article.", "my / your / his…", "articles"],
+  [/\bthe (Brazil|France|Spain|Portugal|Germany|Italy|China|Japan|India|Canada|Mexico|Argentina|Australia|Europe|Asia|Africa|England)\b/g, "Articles", "Most countries and continents take no article.", "Brazil / France…", "articles"],
+  [/\b(am|is|was|were) (a )?(doctor|teacher|engineer|nurse|lawyer|student|manager|accountant|architect|dentist|pilot)\b/gi, "__job", "A job (singular countable noun) needs a / an.", "I am a / an …", "articles"],
+  [/\b(am|is|are|was|were) (knowing|wanting|liking|needing|believing|understanding|agreeing|preferring|hating|loving|owning)\b|\bam (not )?agree\b/gi, "Tenses", "State verbs (know, want, need, agree…) do not take the continuous.", "I know / I want / I agree", "present-simple-vs-continuous"],
+  [/\b(?:he|she|it) (?:work|go|use|make|take|live|need|want|like|get|spend|play|say|think|become|cause|lead|help|affect|provide)\b/gi, "Subject-verb agreement", "Third person singular needs -s in the Present Simple.", "he works / she goes…"],
+  [new RegExp("\\b(?:have|has) " + PP + "\\b[^.!?]*\\b" + FIN + "\\b|\\b" + FIN + "\\b[^.!?]*\\b(?:have|has) " + PP + "\\b", "gi"), "Tenses", "A finished time (yesterday, ago, in 2010…) needs the Past Simple, not the Present Perfect.", "Past Simple: I saw… / It rose in 2005", "past-simple-vs-present-perfect"],
+  [/\b(?:live|lives|work|works|study|studies|know|knows)\b[^.!?,]*\b(?:since (?:19|20)\d\d|since (?:monday|tuesday|wednesday|thursday|friday|january|last \w+)|for \d+ (?:years|months|weeks|days))\b/gi, "Tenses", "A situation that started in the past and continues now needs the Present Perfect with for / since.", "I have lived / worked… for / since", "past-simple-vs-present-perfect"],
+  [/(?<!\b(?:has|have|had|been) )\b(?:changed|transformed|increased|grew|rose|improved|became|affected)\b[^.!?]*\b(?:in recent (?:years|decades|times)|over the (?:last|past) (?:decade|few years|years))\b/gi, "Tenses", "‘In recent years / over the last decade’ reaches today: use the Present Perfect.", "has changed / have increased…", "past-simple-vs-present-perfect"],
   [/\bthe most of\b/gi, "Determiners", "'Most of the' or 'most' + noun.", "most people / most of the people"],
   [/\bin the nowadays\b|\bnowadays days\b/gi, "Vocabulary", "Use 'nowadays' alone.", "nowadays"],
   [/\bactually\b/gi, "False friend (check)", "'Actually' means 'in fact', not 'currently' (atualmente).", "currently / nowadays (if you mean 'atualmente')"],
@@ -55,11 +66,12 @@ export function analyseWriting(text: string, task: 1 | 2, register: "formal" | "
   for (const w of clean.toLowerCase().match(/[a-z']+/g) || []) if (w.length > 3 && !STOP.has(w)) freq[w] = (freq[w] || 0) + 1;
   const repeated = Object.entries(freq).filter(([, n]) => n >= (words > 200 ? 5 : 4)).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const issues: WIssue[] = [];
-  for (const [re, cat, why, fix] of RULES) {
+  for (const [re, cat0, why, fix, concept] of RULES) {
+    const cat = cat0 === "__job" ? "Articles" : cat0;
     if (register === "informal" && (cat === "Register" || cat === "Sentence structure")) continue;
     if (cat === "Capitalisation") { const m = clean.match(/(^|\s)i(\s|'|,)/g); if (m) issues.push({ cat, text: `${m.length}× lowercase "i".`, fix, match: "i" }); continue; }
     const m = clean.match(re);
-    if (m) issues.push({ cat, text: `${why} Found: "${[...new Set(m.map((x) => x.trim()))].slice(0, 3).join('", "')}"`, fix, match: m[0] });
+    if (m) issues.push({ cat, text: `${why} Found: "${[...new Set(m.map((x) => x.trim()))].slice(0, 3).join('", "')}"`, fix, match: m[0], ...(concept ? { concept } : {}) });
   }
   const min = task === 1 ? 150 : 250;
   if (words < min) issues.unshift({ cat: "Task length", text: `${words} words - below the minimum of ${min}. Under-length answers lose marks in Task ${task === 1 ? "Achievement" : "Response"}.`, fix: `Write at least ${min + 10} words.` });

@@ -18,6 +18,7 @@ import { catDef, catLabel, catAreas, topicsOfCat } from "./taxonomy";
 import { classify, load, mistakeDue } from "./errorbank";
 import { isDue, wordProfile } from "./srs";
 import { daysBetween, dateFromKey, todayKey } from "./util";
+import { conceptEvidence, lessonMode, lessonNeed, type Lesson, type LessonMode, type LessonProgress } from "./lessons";
 
 export type CoreArea = "W" | "G" | "L" | "R" | "S";
 export const CORE: CoreArea[] = ["W", "G", "L", "R", "S"];
@@ -111,11 +112,32 @@ export function areaScores(s: State, now = Date.now()): AreaScore[] {
 export interface Deficiency {
   id: string; kind: "skill" | "error" | "production" | "review"; label: string; score: number; area?: CoreArea | "V";
   reasons: string[]; action: string; route: string; mins: number; cat?: string;
+  lesson?: string; mode?: LessonMode["mode"];   // Grammar Learning Layer: which lesson and what kind of help (teach / reteach / practise / apply / test / retest)
 }
 
 const importanceOf = (as: AreaScore[], areas: string[]): number => Math.max(0.4, ...as.filter((a) => areas.includes(a.area)).map((a) => a.importance));
 
-export function errorDeficiencies(s: State, as: AreaScore[], now = Date.now()): Deficiency[] {
+export const lessonProgressOf = (s: State): Record<string, LessonProgress> => (s.kv.lessonProgress || {}) as Record<string, LessonProgress>;
+const prodDue = (s: State, id: string) => { const a = s.skillItems["g:" + id]?.prod; return !!a && a.seen > 0 && a.due <= todayKey(); };
+
+/** Chooses the lesson that explains the concept behind a category's errors (the concept with most recent events), plus what help it needs. */
+export function lessonForCat(s: State, lessons: Lesson[], cat: string, now: number): { lesson: Lesson; mode: LessonMode } | null {
+  const st = s.errors[cat]; if (!st?.concepts) return null;
+  const prog = lessonProgressOf(s);
+  let best: { lesson: Lesson; mode: LessonMode; n: number } | null = null;
+  for (const l of lessons) {
+    if (l.cat !== cat) continue;
+    const ev = conceptEvidence(st, l.id, now);
+    if (!ev.total) continue;
+    const mode = lessonMode(prog[l.id], ev, prodDue(s, l.id), now);
+    if (!best || ev.recent + ev.writing > best.n) best = { lesson: l, mode, n: ev.recent + ev.writing };
+  }
+  return best;
+}
+
+const MODE_ACTION: Record<string, string> = { teach: "Learn", reteach: "Re-read the explanation of", practise: "Controlled practice:", apply: "Write a short paragraph applying", test: "Transfer test:", retest: "Retest (new context):" };
+
+export function errorDeficiencies(s: State, as: AreaScore[], now = Date.now(), lessons: Lesson[] = []): Deficiency[] {
   const out: Deficiency[] = [];
   for (const st of Object.values(s.errors)) {
     const cls = classify(st, now);
@@ -127,12 +149,30 @@ export function errorDeficiencies(s: State, as: AreaScore[], now = Date.now()): 
     const score = imp * (def.sev / 3) * Math.min(1, L / 4) * (cls.recurring ? 1.5 : 1) * (cls.relapsed ? 1.2 : 1);
     const reasons = [`${cls.recent} error${cls.recent === 1 ? "" : "s"} in the last ${30} days (${cls.recurring ? "recurring" : "occasional"}${cls.relapsed ? ", came back after improving" : ""}).`, `${st.streak} correct in a row since the last error.`];
     const hasMistakes = s.mistakes.some((m) => !m.resolved && (m.cat === st.cat));
+    // Grammar Learning Layer: when the errors concentrate on a taught concept, the right help may be an EXPLANATION, not more exercises.
+    const lf = lessons.length ? lessonForCat(s, lessons, st.cat, now) : null;
+    const lessonHelp = lf && lf.mode.mode !== "done" ? lf : null;
     out.push({
       id: "err:" + st.cat, kind: "error", label: catLabel(st.cat), score, area: (def.areas.find((a) => a === "W" || a === "G" || a === "L" || a === "R" || a === "S") as CoreArea) || undefined,
       reasons, mins: 10, cat: st.cat,
-      action: hasMistakes ? `10-minute drill on "${catLabel(st.cat)}"` : `Production session on "${catLabel(st.cat)}"`,
-      route: hasMistakes ? `#/mistakes/practice?cat=${encodeURIComponent(st.cat)}` : `#/produce?cat=${encodeURIComponent(st.cat)}`,
-    });
+      action: lessonHelp ? `${MODE_ACTION[lessonHelp.mode.mode]} "${lessonHelp.lesson.title}"` : hasMistakes ? `10-minute drill on "${catLabel(st.cat)}"` : `Production session on "${catLabel(st.cat)}"`,
+      route: lessonHelp ? `#/grammar/lesson/${lessonHelp.lesson.id}` : hasMistakes ? `#/mistakes/practice?cat=${encodeURIComponent(st.cat)}` : `#/produce?cat=${encodeURIComponent(st.cat)}`,
+      ...(lessonHelp ? { lesson: lessonHelp.lesson.id, mode: lessonHelp.mode.mode, mins: Math.min(20, lessonHelp.lesson.minutes) } : {}),
+    } as Deficiency);
+    if (lessonHelp) { const last = out[out.length - 1]; last.reasons = [lessonHelp.mode.why, ...last.reasons]; last.score = Math.min(1.6, last.score * (0.75 + 0.5 * lessonNeed(lessonHelp.mode.mode))); }
+  }
+  return out;
+}
+
+/** Spaced retest of a lesson that was mastered: the concept comes back in a new context, without its name. */
+export function lessonRetests(s: State, lessons: Lesson[], as: AreaScore[], now: number): Deficiency[] {
+  const prog = lessonProgressOf(s); const out: Deficiency[] = [];
+  for (const l of lessons) {
+    const p = prog[l.id]; if (!p) continue;
+    const ev = conceptEvidence(s.errors[l.cat], l.id, now);
+    const m = lessonMode(p, ev, prodDue(s, l.id), now);
+    if (m.mode !== "retest") continue;
+    out.push({ id: "lesson:" + l.id, kind: "review", label: `Retest: ${l.title}`, score: importanceOf(as, ["G"]) * 0.45, area: "G", reasons: [m.why], action: `Retest (new context): "${l.title}"`, route: `#/grammar/retest/${l.id}`, mins: 8, lesson: l.id, mode: "retest" });
   }
   return out;
 }
@@ -165,7 +205,8 @@ export interface Diagnosis {
 export function diagnose(s: State, c: Content, now = Date.now()): Diagnosis {
   const as = areaScores(s, now);
   const main = as[0];
-  const cands: Deficiency[] = [...errorDeficiencies(s, as, now)];
+  const cands: Deficiency[] = [...errorDeficiencies(s, as, now, c.lessons || [])];
+  cands.push(...lessonRetests(s, c.lessons || [], as, now));
   const p = productionDeficiency(s, c); if (p) cands.push(p);
   for (const a of as) cands.push({ id: "skill:" + a.area, kind: "skill", label: `${a.label} practice`, score: a.score * 0.9, area: a.area, reasons: a.reasons, action: SKILL_ACTION[a.area], route: SKILL_ROUTE[a.area], mins: a.area === "W" ? 40 : 20 });
   cands.sort((x, y) => y.score - x.score);
